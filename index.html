@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!--
+  Copyright 2026 Daakaa Contributors
+  Licensed under the Apache License, Version 2.0
+-->
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>Daakaa</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Editor (left, order:1 in CSS) -->
+    <main id="editor" class="editor">
+      <div id="spreadsheet-wrapper" class="spreadsheet-wrapper">
+        <table id="spreadsheet" class="spreadsheet alt-cols"></table>
+      </div>
+    </main>
+
+    <!-- Sidepanel (right, order:2 in CSS) -->
+    <aside id="sidepanel" class="sidepanel">
+      <button id="sidepanel-toggle" class="sidepanel-tab" title="Toggle panel">›</button>
+      <div class="sidepanel-content">
+        <h2 class="sidepanel-title">Daakaa</h2>
+
+        <!-- Spreadsheet Options -->
+        <details class="panel" open>
+          <summary class="panel-header">Spreadsheet</summary>
+          <div class="panel-body">
+            <label class="field">
+              <span class="field-label">Columns</span>
+              <input type="number" id="col-count" min="1" max="366" value="7">
+            </label>
+            <div class="btn-row" style="margin-top:4px;">
+              <button id="btn-import" class="btn btn-sm">Import .xlsx</button>
+              <button id="btn-export" class="btn btn-sm">Export .xlsx</button>
+            </div>
+          </div>
+        </details>
+
+        <!-- Style Options -->
+        <details class="panel">
+          <summary class="panel-header">Style</summary>
+          <div class="panel-body">
+            <label class="field">
+              <span class="field-label">Font family</span>
+              <input type="text" id="font-family" value="Sarasa UI CL" placeholder="Sarasa UI CL">
+            </label>
+            <label class="field">
+              <span class="field-label">Colour</span>
+              <input type="color" id="theme-color" value="#e0e0e0">
+            </label>
+            <label class="field">
+              <span class="field-label">Colour applies to</span>
+              <select id="color-target">
+                <option value="header">Header cells only</option>
+                <option value="all">All cells</option>
+                <option value="accent">Accent (borders &amp; icons)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">Alternating columns</span>
+              <input type="checkbox" id="alt-cols-toggle" checked>
+            </label>
+          </div>
+        </details>
+
+        <!-- Header Patterns -->
+        <details class="panel" open>
+          <summary class="panel-header">Header Patterns</summary>
+          <div class="panel-body">
+            <div id="pattern-list"></div>
+            <div class="btn-row" style="margin-top:6px;">
+              <button id="add-pattern" class="btn btn-sm">+ Add pattern row</button>
+            </div>
+          </div>
+        </details>
+
+        <!-- Row Details -->
+        <details class="panel" open>
+          <summary class="panel-header">Row Details</summary>
+          <div class="panel-body">
+            <div id="row-details-body">
+              <p class="row-details-info">Double-click a row label to edit. Drag to reorder. Right-click for more options.</p>
+            </div>
+            <div class="btn-row" style="margin-top:6px;">
+              <button id="add-row-item" class="btn btn-sm">+ Add row</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Confirm overlay -->
+  <div id="confirm-overlay" class="confirm-overlay" style="display:none;">
+    <div class="confirm-box">
+      <p id="confirm-msg"></p>
+      <div class="confirm-actions">
+        <button id="confirm-yes" class="btn btn-sm">Overwrite</button>
+        <button id="confirm-no" class="btn btn-sm">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input for xlsx import -->
+  <input type="file" id="xlsx-file-input" accept=".xlsx,.xls" style="display:none;">
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
