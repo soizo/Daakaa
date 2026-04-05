@@ -450,7 +450,7 @@ details[open] > .panel-header::before {
 .spreadsheet thead th {
   position: sticky;
   z-index: 3;
-  background: var(--t3);
+  background: var(--t3-solid);
   color: var(--accent-text);
   text-align: center;
   vertical-align: middle;
@@ -489,7 +489,7 @@ details[open] > .panel-header::before {
   position: sticky;
   left: 0;
   z-index: 4;
-  background: var(--t3);
+  background: var(--t3-solid);
   color: var(--accent-text);
   text-align: center;
   vertical-align: middle;
@@ -814,7 +814,7 @@ details[open] > .panel-header::before {
 
 /* "all" mode: sticky-left also gets accent bg */
 [data-color-target="all"] .spreadsheet .sticky-left {
-  background: var(--t3);
+  background: var(--t3-solid);
   color: var(--accent-text);
   border-right: 2px solid var(--border-strong);
 }
