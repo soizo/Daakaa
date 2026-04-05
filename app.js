@@ -56,14 +56,17 @@ const state = {
   selectedRow: null,
   selection: null,
   anchor: null,
+  viewMode: false,
 };
 
 const CYCLE = ['✓', '×', '〇', '—', ''];
 
-// ── Undo / Redo ───────────────────────────────────
-const undoStack = [];
-const redoStack = [];
-const MAX_UNDO = 50;
+// ── Undo Tree ─────────────────────────────────────
+let undoTree = {};
+let undoCurrentId = null;
+let undoNextId = 1;
+let lastVisitedChild = {};
+const MAX_UNDO_NODES = 500;
 
 function captureSnapshot() {
   return JSON.stringify({
@@ -89,31 +92,183 @@ function restoreSnapshot(snapshot) {
   saveState();
 }
 
-function pushUndo() {
-  undoStack.push(captureSnapshot());
-  if (undoStack.length > MAX_UNDO) undoStack.shift();
-  redoStack.length = 0;
+function createRootNode() {
+  const id = 0;
+  undoTree = { [id]: {
+    id,
+    parentId: null,
+    childIds: [],
+    snapshot: captureSnapshot(),
+    timestamp: Date.now(),
+    actionLabel: 'Session start',
+    branchLabel: null,
+  }};
+  undoCurrentId = id;
+  undoNextId = 1;
+  lastVisitedChild = {};
 }
 
-let _lastUndoPush = 0;
-function pushUndoThrottled() {
+function commitUndoNode(actionLabel) {
+  const node = {
+    id: undoNextId++,
+    parentId: undoCurrentId,
+    childIds: [],
+    snapshot: captureSnapshot(),
+    timestamp: Date.now(),
+    actionLabel: actionLabel || 'Edit',
+    branchLabel: null,
+  };
+  undoTree[node.id] = node;
+  undoTree[undoCurrentId].childIds.push(node.id);
+  undoCurrentId = node.id;
+
+  pruneTree();
+  renderHistoryPanel();
+}
+
+let _lastCommitTime = 0;
+let _lastCommitLabel = '';
+function commitUndoNodeThrottled(actionLabel) {
   const now = Date.now();
-  if (now - _lastUndoPush > 500) {
-    pushUndo();
-    _lastUndoPush = now;
+  if (now - _lastCommitTime > 500 || actionLabel !== _lastCommitLabel) {
+    commitUndoNode(actionLabel);
+    _lastCommitTime = now;
+    _lastCommitLabel = actionLabel;
+  } else {
+    undoTree[undoCurrentId].snapshot = captureSnapshot();
   }
 }
 
 function undo() {
-  if (undoStack.length === 0) return;
-  redoStack.push(captureSnapshot());
-  restoreSnapshot(undoStack.pop());
+  const current = undoTree[undoCurrentId];
+  if (!current || current.parentId === null) return;
+  lastVisitedChild[current.parentId] = undoCurrentId;
+  undoCurrentId = current.parentId;
+  restoreSnapshot(undoTree[undoCurrentId].snapshot);
+  renderHistoryPanel();
 }
 
 function redo() {
-  if (redoStack.length === 0) return;
-  undoStack.push(captureSnapshot());
-  restoreSnapshot(redoStack.pop());
+  const current = undoTree[undoCurrentId];
+  if (!current || current.childIds.length === 0) return;
+  const nextId = lastVisitedChild[undoCurrentId]
+    || current.childIds[current.childIds.length - 1];
+  if (!undoTree[nextId]) return;
+  undoCurrentId = nextId;
+  restoreSnapshot(undoTree[undoCurrentId].snapshot);
+  renderHistoryPanel();
+}
+
+function jumpToNode(id) {
+  if (!undoTree[id]) return;
+  undoCurrentId = id;
+  restoreSnapshot(undoTree[id].snapshot);
+  renderHistoryPanel();
+}
+
+// ── Undo Tree: pruning ────────────────────────────
+function pruneTree() {
+  while (Object.keys(undoTree).length > MAX_UNDO_NODES) {
+    const ancestors = getAncestorIds(undoCurrentId);
+    let oldestLeaf = null;
+    let oldestTime = Infinity;
+
+    for (const id in undoTree) {
+      const node = undoTree[id];
+      if (node.childIds.length === 0 && !ancestors.has(+id) && +id !== undoCurrentId) {
+        if (node.timestamp < oldestTime) {
+          oldestTime = node.timestamp;
+          oldestLeaf = +id;
+        }
+      }
+    }
+
+    if (oldestLeaf === null) break;
+    removeNode(oldestLeaf);
+  }
+}
+
+function getAncestorIds(id) {
+  const set = new Set();
+  let cur = id;
+  while (cur !== null && undoTree[cur]) {
+    set.add(cur);
+    cur = undoTree[cur].parentId;
+  }
+  return set;
+}
+
+function removeNode(id) {
+  const node = undoTree[id];
+  if (!node) return;
+  if (node.parentId !== null && undoTree[node.parentId]) {
+    const parent = undoTree[node.parentId];
+    parent.childIds = parent.childIds.filter(c => c !== id);
+  }
+  delete undoTree[id];
+  delete lastVisitedChild[id];
+}
+
+// ── Undo Tree: history panel rendering ────────────
+function renderHistoryPanel() {
+  const panel = document.getElementById('history-panel');
+  if (!panel) return;
+
+  const pathSet = getAncestorIds(undoCurrentId);
+
+  panel.innerHTML = renderTreeNode(0, pathSet);
+
+  const currentEl = panel.querySelector('.history-node.current');
+  if (currentEl) currentEl.scrollIntoView({ block: 'nearest' });
+
+  panel.querySelectorAll('.history-node').forEach(el => {
+    el.addEventListener('click', () => {
+      jumpToNode(+el.dataset.nodeId);
+    });
+  });
+}
+
+function renderTreeNode(id, pathSet) {
+  const node = undoTree[id];
+  if (!node) return '';
+
+  const isCurrent = id === undoCurrentId;
+  const time = new Date(node.timestamp);
+  const timeStr = String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
+  const label = node.branchLabel || node.actionLabel;
+
+  let html = `<div class="history-node${isCurrent ? ' current' : ''}" data-node-id="${id}">`;
+  html += `<span class="history-node-marker"></span>`;
+  html += `<span class="history-node-label">${esc(label)}</span>`;
+  html += `<span class="history-node-time">${timeStr}</span>`;
+  html += `</div>`;
+
+  if (node.childIds.length > 0) {
+    const onPathChildren = node.childIds.filter(cid => pathSet.has(cid));
+    const offPathChildren = node.childIds.filter(cid => !pathSet.has(cid));
+
+    for (const cid of onPathChildren) {
+      html += renderTreeNode(cid, pathSet);
+    }
+
+    if (offPathChildren.length > 0) {
+      html += `<div class="history-indent">`;
+      for (const cid of offPathChildren) {
+        html += renderTreeNode(cid, pathSet);
+      }
+      html += `</div>`;
+    }
+  }
+
+  return html;
+}
+
+function countDescendants(id) {
+  const node = undoTree[id];
+  if (!node) return 0;
+  let count = 1;
+  for (const cid of node.childIds) count += countDescendants(cid);
+  return count;
 }
 
 // ── DOM References ─────────────────────────────────
@@ -290,6 +445,26 @@ function detectCornerPattern(cornerVal) {
   return null;
 }
 
+// ── Today detection for numeric header corner cells ─
+function isCornerCellToday(h) {
+  const hp = state.headerPatterns[h];
+  if (!hp || hp.pattern !== '数字') return false;
+
+  const cornerVal = getCornerCellValue(h);
+  const today = new Date();
+  const todayDate = today.getDate();
+  const todayMonth = today.getMonth(); // 0-indexed
+
+  const engMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const engIdx = engMonths.indexOf(cornerVal);
+  if (engIdx !== -1 && engIdx === todayMonth) {
+    const vals = getPatternValues(hp, state.cols);
+    return vals.includes(String(todayDate));
+  }
+
+  return false;
+}
+
 // ── Render Spreadsheet ─────────────────────────────
 function renderTable() {
   const cols = state.cols;
@@ -309,7 +484,8 @@ function renderTable() {
   for (let h = 0; h < hpats.length; h++) {
     html += `<tr data-header-row="${h}">`;
     const cornerVal = getCornerCellValue(h);
-    html += `<th class="corner-cell" data-header-row="${h}" style="top:calc(${h} * var(--cell-h) * var(--zoom));">${esc(cornerVal)}</th>`;
+    const todayBold = isCornerCellToday(h) ? 'font-weight:700;' : '';
+    html += `<th class="corner-cell" data-header-row="${h}" style="top:calc(${h} * var(--cell-h) * var(--zoom));${todayBold}">${esc(cornerVal)}</th>`;
     for (let c = 0; c < cols; c++) {
       const val = getHeaderCellValue(h, c);
       html += `<th data-header-row="${h}" data-col="${c}" style="top:calc(${h} * var(--cell-h) * var(--zoom));">${esc(val)}</th>`;
@@ -399,58 +575,60 @@ function bindTableEvents() {
       state.anchor = { r, c };
       state.selection = { r1: r, c1: c, r2: r, c2: c };
 
-      const cur = getCellValue(r, c);
+      if (!state.viewMode) {
+        const cur = getCellValue(r, c);
 
-      // Arrow-prefixed value (←N✓): inline edit the number instead of cycling
-      const arrowMatch = /^←(\d+)✓$/.exec(cur);
-      if (arrowMatch) {
-        // Prevent duplicate editors
-        if (td.querySelector('input')) return;
-        const oldNum = arrowMatch[1];
-        td.classList.add('cell-editing');
-        td.textContent = '';
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.value = oldNum;
-        input.min = '0';
-        td.appendChild(input);
-        input.focus();
-        input.select();
+        // Arrow-prefixed value (←N✓): inline edit the number instead of cycling
+        const arrowMatch = /^←(\d+)✓$/.exec(cur);
+        if (arrowMatch) {
+          // Prevent duplicate editors
+          if (td.querySelector('input')) return;
+          const oldNum = arrowMatch[1];
+          td.classList.add('cell-editing');
+          td.textContent = '';
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.value = oldNum;
+          input.min = '0';
+          td.appendChild(input);
+          input.focus();
+          input.select();
 
-        pushUndo();
-        const commit = () => {
-          const n = input.value.replace(/\D/g, '') || '0';
-          const next = `←${n}✓`;
-          setCellValue(r, c, next);
-          td.dataset.value = next;
-          td.dataset.hasArrow = 'true';
-          td.textContent = next;
-          td.classList.remove('cell-editing');
-          saveState();
-        };
-        const cancel = () => {
-          td.textContent = cur;
-          td.classList.remove('cell-editing');
-        };
-        input.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') { e.preventDefault(); commit(); }
-          else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-        });
-        input.addEventListener('blur', commit);
-        updateSelectionVisual();
-        return;
+          commitUndoNode('Edit arrow count');
+          const commit = () => {
+            const n = input.value.replace(/\D/g, '') || '0';
+            const next = `←${n}✓`;
+            setCellValue(r, c, next);
+            td.dataset.value = next;
+            td.dataset.hasArrow = 'true';
+            td.textContent = next;
+            td.classList.remove('cell-editing');
+            saveState();
+          };
+          const cancel = () => {
+            td.textContent = cur;
+            td.classList.remove('cell-editing');
+          };
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          });
+          input.addEventListener('blur', commit);
+          updateSelectionVisual();
+          return;
+        }
+
+        // Default cycle behaviour: ✓ × 〇 — (empty)
+        const base = cur.includes('←') ? '' : cur;
+        const idx = CYCLE.indexOf(base);
+        const next = CYCLE[(idx + 1) % CYCLE.length];
+        commitUndoNode('Toggle cell');
+        setCellValue(r, c, next);
+        td.dataset.value = next;
+        td.dataset.hasArrow = 'false';
+        td.textContent = next;
+        saveState();
       }
-
-      // Default cycle behaviour: ✓ × 〇 — (empty)
-      const base = cur.includes('←') ? '' : cur;
-      const idx = CYCLE.indexOf(base);
-      const next = CYCLE[(idx + 1) % CYCLE.length];
-      pushUndo();
-      setCellValue(r, c, next);
-      td.dataset.value = next;
-      td.dataset.hasArrow = 'false';
-      td.textContent = next;
-      saveState();
       updateSelectionVisual();
     });
 
@@ -617,7 +795,7 @@ function updateRowDetailsPanel() {
 
   const nameInput = document.getElementById('rd-name');
   nameInput.addEventListener('input', () => {
-    pushUndoThrottled();
+    commitUndoNodeThrottled('Rename row');
     state.rows[idx].name = nameInput.value;
     const cell = $table.querySelector(`.sticky-left[data-row="${idx}"]`);
     if (cell && !cell.classList.contains('cell-editing')) {
@@ -627,7 +805,7 @@ function updateRowDetailsPanel() {
   });
 
   document.getElementById('rd-bold').addEventListener('click', () => {
-    pushUndo();
+    commitUndoNode('Toggle bold');
     state.rows[idx].bold = !state.rows[idx].bold;
     nameInput.style.fontWeight = state.rows[idx].bold ? '700' : '400';
     renderTable();
@@ -635,7 +813,7 @@ function updateRowDetailsPanel() {
   });
 
   document.getElementById('rd-underline').addEventListener('click', () => {
-    pushUndo();
+    commitUndoNode('Toggle underline');
     state.rows[idx].underline = !state.rows[idx].underline;
     nameInput.style.textDecoration = state.rows[idx].underline ? 'underline' : 'none';
     renderTable();
@@ -645,7 +823,7 @@ function updateRowDetailsPanel() {
   document.getElementById('rd-move-btn').addEventListener('click', () => {
     const target = Math.max(1, Math.min(state.rows.length, +document.getElementById('rd-move-target').value || 1)) - 1;
     if (target !== idx) {
-      pushUndo();
+      commitUndoNode('Move row');
       state.selectedRow = target;
       moveRow(idx, target);
       renderTable();
@@ -654,7 +832,7 @@ function updateRowDetailsPanel() {
   });
 
   document.getElementById('rd-delete').addEventListener('click', () => {
-    pushUndo();
+    commitUndoNode('Delete row');
     deleteRow(idx);
   });
 }
@@ -662,7 +840,7 @@ function updateRowDetailsPanel() {
 // ── Inline Editing: Sticky-left cells ──────────────
 function startStickyLeftEdit(cell, rowIdx) {
   if (cell.classList.contains('cell-editing')) return;
-  pushUndo();
+  commitUndoNode('Edit row name');
   const row = state.rows[rowIdx];
   const oldText = row.name;
 
@@ -688,7 +866,7 @@ function startStickyLeftEdit(cell, rowIdx) {
   if (row.bold) btnBold.classList.add('active');
   btnBold.addEventListener('mousedown', (e) => {
     e.preventDefault();
-    pushUndo();
+    commitUndoNode('Toggle format');
     row.bold = !row.bold;
     btnBold.classList.toggle('active', row.bold);
     input.style.fontWeight = row.bold ? '700' : '400';
@@ -701,7 +879,7 @@ function startStickyLeftEdit(cell, rowIdx) {
   if (row.underline) btnUnderline.classList.add('active');
   btnUnderline.addEventListener('mousedown', (e) => {
     e.preventDefault();
-    pushUndo();
+    commitUndoNode('Toggle format');
     row.underline = !row.underline;
     btnUnderline.classList.toggle('active', row.underline);
     input.style.textDecoration = row.underline ? 'underline' : 'none';
@@ -742,7 +920,7 @@ function startStickyLeftEdit(cell, rowIdx) {
 // ── Inline Editing: Header cells ───────────────────
 function startHeaderCellEdit(cell) {
   if (cell.classList.contains('cell-editing')) return;
-  pushUndo();
+  commitUndoNode('Edit header');
   const oldText = cell.textContent;
   cell.classList.add('cell-editing');
   const input = document.createElement('input');
@@ -869,7 +1047,7 @@ function finishRowDrag() {
   tr.classList.remove('drag-hidden');
 
   if (gapIdx !== null && gapIdx !== rowIdx && gapIdx !== rowIdx + 1) {
-    pushUndo();
+    commitUndoNode('Reorder row');
     const from = rowIdx;
     const to = gapIdx > from ? gapIdx - 1 : gapIdx;
     if (state.selectedRow === from) state.selectedRow = to;
@@ -936,7 +1114,7 @@ function positionMenu(menu, _x, _y) {
 
 function batchSetSelection(valueFn) {
   if (!state.selection) return;
-  pushUndo();
+  commitUndoNode('Batch set');
   const { r1, c1, r2, c2 } = state.selection;
   for (let r = r1; r <= r2; r++) {
     for (let c = c1; c <= c2; c++) {
@@ -961,15 +1139,6 @@ function showBatchContextMenu(x, y) {
     { label: 'Set all 〇', action: () => batchSetSelection('〇') },
     { label: 'Set all —', action: () => batchSetSelection('—') },
     { label: 'Clear all', action: () => batchSetSelection('') },
-    { label: 'sep' },
-    { label: 'Set ←N✓', action: () => batchSetSelection((r, c) => {
-      let count = 0;
-      for (let cc = 0; cc <= c; cc++) {
-        const v = getCellValue(r, cc);
-        if (v === '✓' || v.includes('✓')) count++;
-      }
-      return `←${count}✓`;
-    })},
   ];
 
   items.forEach((item) => {
@@ -1000,13 +1169,13 @@ function showContentContextMenu(x, y, row, col) {
   }
 
   [
-    { label: `Set ←${checkCount}✓`, action: () => { pushUndo(); setCellValue(row, col, `←${checkCount}✓`); renderTable(); saveState(); } },
+    { label: `Set ←${checkCount}✓`, action: () => { commitUndoNode('Set cell'); setCellValue(row, col, `←${checkCount}✓`); renderTable(); saveState(); } },
     { label: 'sep' },
-    { label: '✓', action: () => { pushUndo(); setCellValue(row, col, '✓'); renderTable(); saveState(); } },
-    { label: '×', action: () => { pushUndo(); setCellValue(row, col, '×'); renderTable(); saveState(); } },
-    { label: '〇', action: () => { pushUndo(); setCellValue(row, col, '〇'); renderTable(); saveState(); } },
-    { label: '—', action: () => { pushUndo(); setCellValue(row, col, '—'); renderTable(); saveState(); } },
-    { label: 'Clear', action: () => { pushUndo(); setCellValue(row, col, ''); renderTable(); saveState(); } },
+    { label: '✓', action: () => { commitUndoNode('Set cell'); setCellValue(row, col, '✓'); renderTable(); saveState(); } },
+    { label: '×', action: () => { commitUndoNode('Set cell'); setCellValue(row, col, '×'); renderTable(); saveState(); } },
+    { label: '〇', action: () => { commitUndoNode('Set cell'); setCellValue(row, col, '〇'); renderTable(); saveState(); } },
+    { label: '—', action: () => { commitUndoNode('Set cell'); setCellValue(row, col, '—'); renderTable(); saveState(); } },
+    { label: 'Clear', action: () => { commitUndoNode('Set cell'); setCellValue(row, col, ''); renderTable(); saveState(); } },
   ].forEach((item) => {
     if (item.label === 'sep') {
       const s = document.createElement('div'); s.className = 'context-menu-sep'; menu.appendChild(s); return;
@@ -1038,7 +1207,7 @@ function showRowContextMenu(x, y, rowIdx) {
   const del = document.createElement('div');
   del.className = 'context-menu-item destructive';
   del.textContent = 'Delete row';
-  del.addEventListener('click', () => { pushUndo(); deleteRow(rowIdx); hideContextMenu(); });
+  del.addEventListener('click', () => { commitUndoNode('Delete row'); deleteRow(rowIdx); hideContextMenu(); });
   menu.appendChild(del);
 
   positionMenu(menu, x, y);
@@ -1048,7 +1217,7 @@ function showRowContextMenu(x, y, rowIdx) {
   const doMove = () => {
     const target = Math.max(1, Math.min(state.rows.length, +moveInput.value || 1)) - 1;
     if (target !== rowIdx) {
-      pushUndo();
+      commitUndoNode('Move row');
       if (state.selectedRow === rowIdx) state.selectedRow = target;
       moveRow(rowIdx, target);
       renderTable();
@@ -1173,7 +1342,7 @@ function bindPatternEvents() {
       const isStandard = (t) => t !== '自訂' && t !== '映射';
 
       if (oldType === newType) return;
-      pushUndo();
+      commitUndoNode('Change pattern');
 
       // Clean old type fields
       if (isStandard(oldType)) {
@@ -1203,7 +1372,7 @@ function bindPatternEvents() {
   // Standard pattern controls
   $patternList.querySelectorAll('.pat-start').forEach((input) => {
     input.addEventListener('input', () => {
-      pushUndoThrottled();
+      commitUndoNodeThrottled('Edit start');
       state.headerPatterns[+input.dataset.index].start = +input.value || 0;
       renderTable();
       saveState();
@@ -1212,7 +1381,7 @@ function bindPatternEvents() {
 
   $patternList.querySelectorAll('.pat-step').forEach((input) => {
     input.addEventListener('input', () => {
-      pushUndoThrottled();
+      commitUndoNodeThrottled('Edit step');
       const raw = input.value.replace(/^\+/, '');
       const val = parseInt(raw, 10);
       state.headerPatterns[+input.dataset.index].step = isNaN(val) ? 1 : val;
@@ -1228,7 +1397,7 @@ function bindPatternEvents() {
   // 映射 source dropdown
   $patternList.querySelectorAll('.pat-source').forEach((sel) => {
     sel.addEventListener('change', () => {
-      pushUndo();
+      commitUndoNode('Change source');
       const i = +sel.dataset.index;
       state.headerPatterns[i].sourceIndex = +sel.value;
       renderTable();
@@ -1263,7 +1432,7 @@ function bindPatternEvents() {
   // Force-reinitialise per type
   $patternList.querySelectorAll('.pat-reset').forEach((btn) => {
     btn.addEventListener('click', () => {
-      pushUndo();
+      commitUndoNode('Reset pattern');
       const i = +btn.dataset.index;
       const hp = state.headerPatterns[i];
       if (hp.pattern === '自訂') {
@@ -1294,7 +1463,7 @@ function bindPatternEvents() {
     btn.addEventListener('click', () => {
       const i = +btn.dataset.index;
       if (state.headerPatterns.length <= 1) return;
-      pushUndo();
+      commitUndoNode('Delete pattern');
       state.headerPatterns.splice(i, 1);
 
       // Cascade: fix 映射 sourceIndex references
@@ -1353,7 +1522,7 @@ function buildCustomEditor(patIndex) {
       inp.type = 'text';
       inp.value = val;
       inp.addEventListener('input', () => {
-        pushUndoThrottled();
+        commitUndoNodeThrottled('Edit value');
         hp.values[vi] = inp.value;
         renderTable();
         saveState();
@@ -1365,7 +1534,7 @@ function buildCustomEditor(patIndex) {
       del.textContent = '✕';
       del.disabled = hp.values.length <= 1;
       del.addEventListener('click', () => {
-        pushUndo();
+        commitUndoNode('Delete value');
         hp.values.splice(vi, 1);
         rebuild();
         updateEditorButton();
@@ -1380,7 +1549,7 @@ function buildCustomEditor(patIndex) {
     addBtn.className = 'btn btn-sm';
     addBtn.textContent = '+ Add value';
     addBtn.addEventListener('click', () => {
-      pushUndo();
+      commitUndoNode('Add value');
       hp.values.push('');
       rebuild();
       updateEditorButton();
@@ -1428,7 +1597,7 @@ function buildMappingEditor(patIndex) {
       keyInp.addEventListener('blur', () => {
         const newKey = keyInp.value;
         if (newKey !== originalKey) {
-          pushUndo();
+          commitUndoNode('Edit mapping');
           delete hp.mappings[originalKey];
           if (newKey !== '') {
             hp.mappings[newKey] = val;
@@ -1450,7 +1619,7 @@ function buildMappingEditor(patIndex) {
       valInp.type = 'text';
       valInp.value = val;
       valInp.addEventListener('input', () => {
-        pushUndoThrottled();
+        commitUndoNodeThrottled('Edit mapping');
         hp.mappings[key] = valInp.value;
         renderTable();
         saveState();
@@ -1461,7 +1630,7 @@ function buildMappingEditor(patIndex) {
       del.className = 'pattern-item-btn';
       del.textContent = '✕';
       del.addEventListener('click', () => {
-        pushUndo();
+        commitUndoNode('Delete mapping');
         delete hp.mappings[key];
         rebuild();
         updateEditorButton();
@@ -1476,7 +1645,7 @@ function buildMappingEditor(patIndex) {
     addBtn.className = 'btn btn-sm';
     addBtn.textContent = '+ Add mapping';
     addBtn.addEventListener('click', () => {
-      pushUndo();
+      commitUndoNode('Add mapping');
       hp.mappings[''] = '';
       rebuild();
       updateEditorButton();
@@ -1581,7 +1750,7 @@ function bindSidepanelControls() {
   });
 
   $colCount.addEventListener('input', () => {
-    pushUndoThrottled();
+    commitUndoNodeThrottled('Change columns');
     state.cols = Math.max(1, Math.min(366, +$colCount.value || 1));
     renderTable();
     saveState();
@@ -1606,7 +1775,7 @@ function bindSidepanelControls() {
   });
 
   $addPattern.addEventListener('click', () => {
-    pushUndo();
+    commitUndoNode('Add pattern');
     state.headerPatterns.push({ pattern: '数字', start: 1, step: 1 });
     renderPatternList();
     renderTable();
@@ -1614,7 +1783,7 @@ function bindSidepanelControls() {
   });
 
   $addRowItem.addEventListener('click', () => {
-    pushUndo();
+    commitUndoNode('Add row');
     state.rows.push({ name: `Item ${state.rows.length + 1}`, bold: false, underline: false });
     renderTable();
     saveState();
@@ -1851,7 +2020,7 @@ async function handleImport() {
       }
     }
 
-    pushUndo();
+    commitUndoNode('Import');
     state.cols = numCols || state.cols;
     state.rows = newRows.length > 0 ? newRows : state.rows;
     state.cells = newCells;
@@ -2025,6 +2194,7 @@ function saveState() {
     delete s.selectedRow;
     delete s.selection;
     delete s.anchor;
+    delete s.viewMode;
     localStorage.setItem('daakaa-state', JSON.stringify(s));
   } catch (_) {}
 }
@@ -2080,6 +2250,47 @@ function init() {
   renderPatternList();
   renderTable();
   bindSidepanelControls();
+  createRootNode();
+
+  // View mode toggle button
+  const $viewModeBtn = document.createElement('button');
+  $viewModeBtn.id = 'view-mode-btn';
+  $viewModeBtn.className = 'view-mode-btn';
+  $viewModeBtn.textContent = '\u25A2'; // ▢ = edit mode (open)
+  $viewModeBtn.title = 'Toggle view mode (mouse drag only)';
+  document.getElementById('editor').appendChild($viewModeBtn);
+
+  $viewModeBtn.addEventListener('click', () => {
+    state.viewMode = !state.viewMode;
+    $viewModeBtn.textContent = state.viewMode ? '\u25A3' : '\u25A2'; // ▣ locked / ▢ open
+    $viewModeBtn.classList.toggle('active', state.viewMode);
+  });
+
+  // Sidepanel resize handle
+  const $resizeHandle = document.createElement('div');
+  $resizeHandle.className = 'sidepanel-resize';
+  $sidepanel.prepend($resizeHandle);
+
+  $resizeHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = $sidepanel.offsetWidth;
+
+    const onMove = (ev) => {
+      const delta = startX - ev.clientX;
+      const newW = Math.max(200, Math.min(500, startW + delta));
+      $sidepanel.style.width = newW + 'px';
+      $sidepanel.style.minWidth = newW + 'px';
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 init();
