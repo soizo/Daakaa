@@ -61,6 +61,8 @@ const state = {
 
 const CYCLE = ['✓', '×', '〇', '—', ''];
 
+let hoveredCell = null;
+
 // ── Undo Tree ─────────────────────────────────────
 let undoTree = {};
 let undoCurrentId = null;
@@ -486,9 +488,18 @@ function renderTable() {
     const cornerVal = getCornerCellValue(h);
     const todayBold = isCornerCellToday(h) ? 'font-weight:700;' : '';
     html += `<th class="corner-cell" data-header-row="${h}" style="top:calc(${h} * var(--cell-h) * var(--zoom));${todayBold}">${esc(cornerVal)}</th>`;
+    let todayCols = null;
+    if (isCornerCellToday(h)) {
+      const todayDate = new Date().getDate();
+      const allVals = getPatternValues(hpats[h], cols);
+      todayCols = new Set();
+      allVals.forEach((v, i) => { if (String(v) === String(todayDate)) todayCols.add(i); });
+    }
     for (let c = 0; c < cols; c++) {
       const val = getHeaderCellValue(h, c);
-      html += `<th data-header-row="${h}" data-col="${c}" style="top:calc(${h} * var(--cell-h) * var(--zoom));">${esc(val)}</th>`;
+      const isTodayCol = todayCols && todayCols.has(c);
+      const todayStyle = isTodayCol ? 'font-weight:700;' : '';
+      html += `<th data-header-row="${h}" data-col="${c}" style="top:calc(${h} * var(--cell-h) * var(--zoom));${todayStyle}">${esc(val)}</th>`;
     }
     html += '</tr>';
   }
@@ -633,6 +644,13 @@ function bindTableEvents() {
       updateSelectionVisual();
     });
 
+    td.addEventListener('mouseenter', () => {
+      hoveredCell = { r: +td.dataset.row, c: +td.dataset.col };
+    });
+    td.addEventListener('mouseleave', () => {
+      hoveredCell = null;
+    });
+
     td.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const r = +td.dataset.row;
@@ -687,6 +705,7 @@ function bindStickyLeftInteractions() {
 
       mouseDownPos = { x: e.clientX, y: e.clientY };
       isDragging = false;
+      const wasShift = e.shiftKey;
 
       const onMove = (ev) => {
         if (!mouseDownPos) return;
@@ -706,7 +725,13 @@ function bindStickyLeftInteractions() {
         document.removeEventListener('mouseup', onUp);
         if (isDragging) {
           finishRowDrag();
+        } else if (wasShift && state.anchor) {
+          const r1 = Math.min(state.anchor.r, rowIdx);
+          const r2 = Math.max(state.anchor.r, rowIdx);
+          state.selection = { r1, c1: 0, r2, c2: state.cols - 1 };
+          updateSelectionVisual();
         } else {
+          state.anchor = { r: rowIdx, c: 0 };
           selectRow(rowIdx);
         }
         mouseDownPos = null;
@@ -724,6 +749,15 @@ function bindStickyLeftInteractions() {
 
     leftCell.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (state.selection) {
+        const { r1, r2, c1, c2 } = state.selection;
+        const isFullWidth = c1 === 0 && c2 === state.cols - 1;
+        const isMulti = r2 > r1;
+        if (isMulti && isFullWidth && rowIdx >= r1 && rowIdx <= r2) {
+          showBatchContextMenu(e.clientX, e.clientY);
+          return;
+        }
+      }
       showRowContextMenu(e.clientX, e.clientY, rowIdx);
     });
 
@@ -1692,20 +1726,122 @@ function setZoom(z) {
   saveState();
 }
 
-// Keyboard: Cmd +/- / 0
+// Keyboard shortcuts (unified)
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     state.selection = null;
     state.anchor = null;
     updateSelectionVisual();
   }
-  if (!(e.ctrlKey || e.metaKey)) return;
-  if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-  else if (e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
-  else if (e.key === 'y') { e.preventDefault(); redo(); }
-  else if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(state.zoom + 0.1); }
-  else if (e.key === '-') { e.preventDefault(); setZoom(state.zoom - 0.1); }
-  else if (e.key === '0') { e.preventDefault(); setZoom(1); }
+
+  // Delete / Backspace
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+
+    if (state.selection) {
+      const { r1, c1, r2, c2 } = state.selection;
+      const isFullWidth = c1 === 0 && c2 === state.cols - 1;
+
+      if (isFullWidth && r2 >= r1) {
+        commitUndoNode('Delete rows');
+        for (let r = r2; r >= r1; r--) {
+          state.rows.splice(r, 1);
+          const newCells = {};
+          Object.keys(state.cells).forEach(key => {
+            const k = +key;
+            if (k < r) newCells[k] = state.cells[k];
+            else if (k > r) newCells[k - 1] = state.cells[k];
+          });
+          state.cells = newCells;
+        }
+        state.selection = null;
+        state.anchor = null;
+        state.selectedRow = null;
+        renderTable();
+        saveState();
+      } else {
+        commitUndoNode('Clear cells');
+        for (let r = r1; r <= r2; r++) {
+          for (let c = c1; c <= c2; c++) {
+            setCellValue(r, c, '');
+          }
+        }
+        renderTable();
+        saveState();
+      }
+    } else if (state.selectedRow !== null) {
+      commitUndoNode('Delete row');
+      deleteRow(state.selectedRow);
+    }
+    return;
+  }
+
+  // Ctrl/Cmd shortcuts (undo, redo, zoom)
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
+    else if (e.key === 'y') { e.preventDefault(); redo(); }
+    else if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(state.zoom + 0.1); }
+    else if (e.key === '-') { e.preventDefault(); setZoom(state.zoom - 0.1); }
+    else if (e.key === '0') { e.preventDefault(); setZoom(1); }
+    return;
+  }
+
+  // Cell value keyboard shortcuts (edit mode only, no modifier keys)
+  if (!state.viewMode && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    const keyMap = {
+      'v': '✓', 'V': '✓',
+      'x': '×', 'X': '×',
+      '-': '—',
+      'o': '〇', 'O': '〇',
+    };
+
+    const val = keyMap[e.key];
+    const isComma = e.key === ',';
+
+    if (val || isComma) {
+      e.preventDefault();
+
+      if (state.selection) {
+        const { r1, c1, r2, c2 } = state.selection;
+        commitUndoNode('Set cells');
+        for (let r = r1; r <= r2; r++) {
+          for (let c = c1; c <= c2; c++) {
+            if (isComma) {
+              let count = 0;
+              for (let cc = 0; cc <= c; cc++) {
+                const cv = getCellValue(r, cc);
+                if (cv === '✓' || cv.includes('✓')) count++;
+              }
+              setCellValue(r, c, `←${count}✓`);
+            } else {
+              setCellValue(r, c, val);
+            }
+          }
+        }
+        renderTable();
+        saveState();
+      } else if (hoveredCell) {
+        const { r, c } = hoveredCell;
+        commitUndoNode('Set cell');
+        if (isComma) {
+          let count = 0;
+          for (let cc = 0; cc <= c; cc++) {
+            const cv = getCellValue(r, cc);
+            if (cv === '✓' || cv.includes('✓')) count++;
+          }
+          setCellValue(r, c, `←${count}✓`);
+        } else {
+          setCellValue(r, c, val);
+        }
+        renderTable();
+        saveState();
+      }
+    }
+  }
 });
 
 // Cmd + scroll wheel (desktop)
@@ -1765,11 +1901,6 @@ $wrapper.addEventListener('touchend', () => {
 
 // ── Sidebar Controls ───────────────────────────────
 function bindSidepanelControls() {
-  $sidepanelToggle.addEventListener('click', () => {
-    const collapsed = $sidepanel.classList.toggle('collapsed');
-    $sidepanelToggle.textContent = collapsed ? '‹' : '›';
-  });
-
   $colCount.addEventListener('input', () => {
     commitUndoNodeThrottled('Change columns');
     state.cols = Math.max(1, Math.min(366, +$colCount.value || 1));
@@ -2277,6 +2408,69 @@ function init() {
   bindSidepanelControls();
   createRootNode();
 
+  // Combined sidepanel drag+click logic
+  let _lastSidepanelWidth = 280;
+
+  $sidepanelToggle.addEventListener('mousedown', (e) => {
+    if ($sidepanel.classList.contains('collapsed')) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = $sidepanel.offsetWidth;
+    let moved = false;
+
+    const onMove = (ev) => {
+      moved = true;
+      const delta = startX - ev.clientX;
+      const newW = Math.max(40, Math.min(500, startW + delta));
+      if (newW <= 40) {
+        $sidepanel.classList.add('collapsed');
+        $sidepanel.style.width = '';
+        $sidepanel.style.minWidth = '';
+        $sidepanelToggle.textContent = '‹';
+        $sidepanelToggle.style.cursor = 'pointer';
+        _lastSidepanelWidth = startW;
+      } else {
+        $sidepanel.classList.remove('collapsed');
+        $sidepanel.style.width = newW + 'px';
+        $sidepanel.style.minWidth = newW + 'px';
+        $sidepanelToggle.textContent = '›';
+        $sidepanelToggle.style.cursor = 'col-resize';
+      }
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (!moved) {
+        const collapsed = $sidepanel.classList.toggle('collapsed');
+        if (collapsed) {
+          _lastSidepanelWidth = startW;
+          $sidepanel.style.width = '';
+          $sidepanel.style.minWidth = '';
+          $sidepanelToggle.textContent = '‹';
+          $sidepanelToggle.style.cursor = 'pointer';
+        } else {
+          $sidepanel.style.width = _lastSidepanelWidth + 'px';
+          $sidepanel.style.minWidth = _lastSidepanelWidth + 'px';
+          $sidepanelToggle.textContent = '›';
+          $sidepanelToggle.style.cursor = 'col-resize';
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  $sidepanelToggle.addEventListener('click', () => {
+    if (!$sidepanel.classList.contains('collapsed')) return;
+    $sidepanel.classList.remove('collapsed');
+    $sidepanel.style.width = _lastSidepanelWidth + 'px';
+    $sidepanel.style.minWidth = _lastSidepanelWidth + 'px';
+    $sidepanelToggle.textContent = '›';
+    $sidepanelToggle.style.cursor = 'col-resize';
+  });
+
   // View mode toggle button
   const $viewModeBtn = document.createElement('button');
   $viewModeBtn.id = 'view-mode-btn';
@@ -2285,37 +2479,51 @@ function init() {
   $viewModeBtn.title = 'Toggle view mode (mouse drag only)';
   document.getElementById('editor').appendChild($viewModeBtn);
 
+  if (!$sidepanel.classList.contains('collapsed')) {
+    $sidepanelToggle.style.cursor = 'col-resize';
+  }
+
+  // Fit-to-device button
+  const $fitBtn = document.createElement('button');
+  $fitBtn.className = 'view-mode-btn';
+  $fitBtn.style.left = '52px';
+  $fitBtn.textContent = '\u229E';
+  $fitBtn.title = 'Fit to screen width';
+  document.getElementById('editor').appendChild($fitBtn);
+
+  $fitBtn.addEventListener('click', () => {
+    const editorWidth = document.getElementById('editor').offsetWidth;
+    const tableWidth = $table.scrollWidth / state.zoom;
+    if (tableWidth > 0) {
+      setZoom(Math.min(2, Math.max(0.3, (editorWidth - 32) / tableWidth)));
+    }
+  });
+
   $viewModeBtn.addEventListener('click', () => {
     state.viewMode = !state.viewMode;
     $viewModeBtn.textContent = state.viewMode ? '\u25A3' : '\u25A2'; // ▣ locked / ▢ open
     $viewModeBtn.classList.toggle('active', state.viewMode);
+    $wrapper.classList.toggle('view-mode', state.viewMode);
   });
 
-  // Sidepanel resize handle
-  const $resizeHandle = document.createElement('div');
-  $resizeHandle.className = 'sidepanel-resize';
-  $sidepanel.prepend($resizeHandle);
-
-  $resizeHandle.addEventListener('mousedown', (e) => {
+  $wrapper.addEventListener('mousedown', (e) => {
+    if (!state.viewMode) return;
+    if (e.target.closest('.sticky-left') || e.target.closest('thead')) return;
     e.preventDefault();
-    const startX = e.clientX;
-    const startW = $sidepanel.offsetWidth;
-
+    const startX = e.clientX, startY = e.clientY;
+    const startScrollX = $wrapper.scrollLeft, startScrollY = $wrapper.scrollTop;
     const onMove = (ev) => {
-      const delta = startX - ev.clientX;
-      const newW = Math.max(200, Math.min(500, startW + delta));
-      $sidepanel.style.width = newW + 'px';
-      $sidepanel.style.minWidth = newW + 'px';
+      $wrapper.scrollLeft = startScrollX - (ev.clientX - startX);
+      $wrapper.scrollTop = startScrollY - (ev.clientY - startY);
     };
-
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
-
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
+
 }
 
 init();

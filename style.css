@@ -116,7 +116,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  cursor: col-resize;
   border: none;
   background: #fff;
   color: var(--accent);
@@ -436,19 +436,6 @@ details[open] > .panel-header::before {
 .view-mode-btn.active {
   background: #000;
   color: #fff;
-}
-
-/* ── Sidepanel resize handle ──────────────────────── */
-.sidepanel-resize {
-  width: 4px;
-  cursor: col-resize;
-  background: transparent;
-  flex-shrink: 0;
-  height: 100%;
-}
-
-.sidepanel-resize:hover {
-  background: var(--border);
 }
 
 /* ── Spreadsheet wrapper — hidden scrollbar ─────── */
@@ -944,6 +931,29 @@ details[open] > .panel-header::before {
   background: var(--t3-solid);
   color: var(--accent-text);
   border-right: 2px solid var(--border-strong);
+}
+
+/* ── View mode (drag-to-pan) ───────────────────── */
+.view-mode {
+  cursor: grab;
+}
+
+.view-mode:active {
+  cursor: grabbing;
+}
+
+.view-mode .spreadsheet .content-cell {
+  cursor: grab;
+}
+
+.view-mode .spreadsheet .content-cell:hover {
+  background: transparent;
+  outline: none;
+}
+
+.view-mode .spreadsheet.alt-cols td.content-cell:nth-child(even):hover {
+  background: var(--t2);
+  outline: none;
 }
 
 /* ── Responsive: iPad ───────────────────────────── */
