@@ -582,12 +582,13 @@ details[open] > .panel-header::before {
 .spreadsheet .content-cell[data-value="✓"] { color: #2d8a4e; }
 .spreadsheet .content-cell[data-value="×"] { color: #c0392b; }
 .spreadsheet .content-cell[data-value="〇"] { color: #2980b9; }
-.spreadsheet .content-cell[data-value="—"] { color: var(--accent); }
+.spreadsheet .content-cell[data-value="—"] { color: #000; }
 
 /* Arrow-prefixed content like ←3✓ */
 .spreadsheet .content-cell[data-has-arrow="true"] {
   font-size: calc(11px * var(--zoom));
   letter-spacing: -0.5px;
+  color: #000;
 }
 
 /* ── Alternating column backgrounds ─────────────── */

@@ -311,6 +311,46 @@ function bindTableEvents() {
       const r = +td.dataset.row;
       const c = +td.dataset.col;
       const cur = getCellValue(r, c);
+
+      // Arrow-prefixed value (←N✓): inline edit the number instead of cycling
+      const arrowMatch = /^←(\d+)✓$/.exec(cur);
+      if (arrowMatch) {
+        // Prevent duplicate editors
+        if (td.querySelector('input')) return;
+        const oldNum = arrowMatch[1];
+        td.classList.add('cell-editing');
+        td.textContent = '';
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.value = oldNum;
+        input.min = '0';
+        td.appendChild(input);
+        input.focus();
+        input.select();
+
+        const commit = () => {
+          const n = input.value.replace(/\D/g, '') || '0';
+          const next = `←${n}✓`;
+          setCellValue(r, c, next);
+          td.dataset.value = next;
+          td.dataset.hasArrow = 'true';
+          td.textContent = next;
+          td.classList.remove('cell-editing');
+          saveState();
+        };
+        const cancel = () => {
+          td.textContent = cur;
+          td.classList.remove('cell-editing');
+        };
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        });
+        input.addEventListener('blur', commit);
+        return;
+      }
+
+      // Default cycle behaviour: ✓ × 〇 — (empty)
       const base = cur.includes('←') ? '' : cur;
       const idx = CYCLE.indexOf(base);
       const next = CYCLE[(idx + 1) % CYCLE.length];
@@ -761,7 +801,7 @@ function hideContextMenu() {
   if ($contextMenu) { $contextMenu.remove(); $contextMenu = null; }
 }
 
-function positionMenu(menu, x, y) {
+function positionMenu(menu, _x, _y) {
   document.body.appendChild(menu);
   $contextMenu = menu;
   const rect = menu.getBoundingClientRect();
