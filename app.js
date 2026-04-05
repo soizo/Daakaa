@@ -1397,10 +1397,17 @@ function applyStyles() {
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   root.style.setProperty('--accent-text', luminance > 0.5 ? '#000' : '#fff');
 
-  // 4-tier partial rollout: stripe fill (t2) and interaction state (t4).
-  // t2 is the accent at 0.18 opacity — always a lighter wash than t4 on white.
-  // t4 is the accent at full opacity — the unambiguous hover state.
+  // 4-tier rollout: t2 (stripe), t3 (header), t3-solid (wrapper bg), t4 (UI hover).
+  // t2 = accent at 0.18 opacity — light stripe wash.
+  // t3 = accent at 0.65 opacity — header fill (semi-transparent).
+  // t3-solid = t3 composited on white — opaque equivalent for wrapper padding.
+  // t4 = accent at full opacity — button/UI hover state.
   root.style.setProperty('--t2', `rgba(${r},${g},${b},0.18)`);
+  root.style.setProperty('--t3', `rgba(${r},${g},${b},0.65)`);
+  const t3r = Math.round(r * 0.65 + 255 * 0.35);
+  const t3g = Math.round(g * 0.65 + 255 * 0.35);
+  const t3b = Math.round(b * 0.65 + 255 * 0.35);
+  root.style.setProperty('--t3-solid', `rgb(${t3r},${t3g},${t3b})`);
   root.style.setProperty('--t4', state.color);
 
   document.getElementById('app').dataset.colorTarget = state.colorTarget;

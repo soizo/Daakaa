@@ -30,11 +30,15 @@
   --accent-text: #000;
   --border: rgba(0,0,0,0.12);
   --border-strong: #000;
-  /* Partial 4-tier rollout — t2/t4 split for hover fix.
+  /* Partial 4-tier rollout — t2/t3/t4 split.
    * --t2: stripe fill (accent at 0.18 opacity on white ≈ #f5f5f5 at default)
+   * --t3: header fill (accent at 0.65 opacity — lighter than raw accent)
+   * --t3-solid: composited-on-white equivalent of --t3, for opaque backgrounds
    * --t4: interaction state (accent at full opacity)
-   * Both are overwritten by app.js when the user changes the accent colour. */
+   * All are overwritten by app.js when the user changes the accent colour. */
   --t2: rgba(224,224,224,0.18);
+  --t3: rgba(224,224,224,0.65);
+  --t3-solid: #ebebeb;
   --t4: #e0e0e0;
   --sidepanel-w: 280px;
   --cell-h: 26px;
@@ -411,7 +415,7 @@ details[open] > .panel-header::before {
   overflow: auto;
   position: relative;
   padding: var(--table-margin);
-  background: var(--accent);
+  background: var(--t3-solid);
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -446,7 +450,7 @@ details[open] > .panel-header::before {
 .spreadsheet thead th {
   position: sticky;
   z-index: 3;
-  background: var(--accent);
+  background: var(--t3);
   color: var(--accent-text);
   text-align: center;
   vertical-align: middle;
@@ -485,7 +489,7 @@ details[open] > .panel-header::before {
   position: sticky;
   left: 0;
   z-index: 4;
-  background: var(--accent);
+  background: var(--t3);
   color: var(--accent-text);
   text-align: center;
   vertical-align: middle;
@@ -570,7 +574,9 @@ details[open] > .panel-header::before {
 }
 
 .spreadsheet .content-cell:hover {
-  background: var(--t4);
+  background: rgba(0,0,0,0.06);
+  outline: 1px solid #000;
+  outline-offset: -1px;
 }
 
 .spreadsheet .content-cell[data-value="✓"] { color: #2d8a4e; }
@@ -595,7 +601,9 @@ details[open] > .panel-header::before {
 }
 
 .spreadsheet.alt-cols td.content-cell:nth-child(even):hover {
-  background: var(--t4);
+  background: rgba(0,0,0,0.06);
+  outline: 1px solid #000;
+  outline-offset: -1px;
 }
 
 /* ── Drag row visual ────────────────────────────── */
@@ -806,7 +814,7 @@ details[open] > .panel-header::before {
 
 /* "all" mode: sticky-left also gets accent bg */
 [data-color-target="all"] .spreadsheet .sticky-left {
-  background: var(--accent);
+  background: var(--t3);
   color: var(--accent-text);
   border-right: 2px solid var(--border-strong);
 }
