@@ -556,6 +556,7 @@ function escAttr(s) {
 function bindTableEvents() {
   $table.querySelectorAll('.content-cell').forEach((td) => {
     td.addEventListener('click', (e) => {
+      if (isModalOpen()) return;
       const r = +td.dataset.row;
       const c = +td.dataset.col;
 
@@ -653,6 +654,7 @@ function bindTableEvents() {
 
   $table.querySelectorAll('thead th').forEach((th) => {
     th.addEventListener('click', () => {
+      if (isModalOpen()) return;
       state.selection = null;
       state.anchor = null;
       updateSelectionVisual();
@@ -679,6 +681,7 @@ function bindStickyLeftInteractions() {
     const DRAG_THRESHOLD = 5;
 
     leftCell.addEventListener('mousedown', (e) => {
+      if (isModalOpen()) return;
       if (e.button !== 0) return;
       if (leftCell.classList.contains('cell-editing')) return;
 
@@ -1103,13 +1106,31 @@ function hideContextMenu() {
   if ($contextMenu) { $contextMenu.remove(); $contextMenu = null; }
 }
 
+function isModalOpen() {
+  if ($contextMenu) return true;
+  const overlay = document.getElementById('confirm-overlay');
+  if (overlay && overlay.style.display !== 'none') return true;
+  return false;
+}
+
 function positionMenu(menu, _x, _y) {
   document.body.appendChild(menu);
   $contextMenu = menu;
   const rect = menu.getBoundingClientRect();
   if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 4) + 'px';
   if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 4) + 'px';
-  setTimeout(() => document.addEventListener('click', hideContextMenu, { once: true }), 0);
+  setTimeout(() => {
+    const dismissHandler = (e) => {
+      if ($contextMenu && $contextMenu.contains(e.target)) return;
+      e.stopPropagation();
+      e.preventDefault();
+      hideContextMenu();
+      document.removeEventListener('click', dismissHandler, true);
+      document.removeEventListener('contextmenu', dismissHandler, true);
+    };
+    document.addEventListener('click', dismissHandler, true);
+    document.addEventListener('contextmenu', dismissHandler, true);
+  }, 0);
 }
 
 function batchSetSelection(valueFn) {
@@ -1849,6 +1870,9 @@ function showConfirm(msg) {
     const cleanup = () => { overlay.style.display = 'none'; yes.onclick = null; no.onclick = null; };
     yes.onclick = () => { cleanup(); resolve(true); };
     no.onclick = () => { cleanup(); resolve(false); };
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { cleanup(); resolve(false); }
+    }, { once: true });
   });
 }
 
@@ -2231,6 +2255,7 @@ function syncSidepanelFromState() {
 
 // Deselect on clicking editor background
 $wrapper.addEventListener('click', (e) => {
+  if (isModalOpen()) return;
   if (e.target === e.currentTarget || e.target === $table) {
     state.selectedRow = null;
     state.selection = null;
