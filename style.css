@@ -414,7 +414,6 @@ details[open] > .panel-header::before {
   height: 100%;
   overflow: auto;
   position: relative;
-  padding: var(--table-margin);
   background: var(--t3-solid);
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -429,6 +428,7 @@ details[open] > .panel-header::before {
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
+  margin: var(--table-margin);
   font-size: calc(15px * var(--zoom));
 }
 
