@@ -54,9 +54,67 @@ const state = {
   zoom: 1,
   altCols: true,
   selectedRow: null,
+  selection: null,
+  anchor: null,
 };
 
 const CYCLE = ['✓', '×', '〇', '—', ''];
+
+// ── Undo / Redo ───────────────────────────────────
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO = 50;
+
+function captureSnapshot() {
+  return JSON.stringify({
+    cells: state.cells,
+    rows: state.rows,
+    headerPatterns: state.headerPatterns,
+    headerOverrides: state.headerOverrides,
+    cols: state.cols,
+  });
+}
+
+function restoreSnapshot(snapshot) {
+  const s = JSON.parse(snapshot);
+  state.cells = s.cells;
+  state.rows = s.rows;
+  state.headerPatterns = s.headerPatterns;
+  state.headerOverrides = s.headerOverrides;
+  state.cols = s.cols;
+  state.selectedRow = null;
+  $colCount.value = state.cols;
+  renderPatternList();
+  renderTable();
+  saveState();
+}
+
+function pushUndo() {
+  undoStack.push(captureSnapshot());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+
+let _lastUndoPush = 0;
+function pushUndoThrottled() {
+  const now = Date.now();
+  if (now - _lastUndoPush > 500) {
+    pushUndo();
+    _lastUndoPush = now;
+  }
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  redoStack.push(captureSnapshot());
+  restoreSnapshot(undoStack.pop());
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+  undoStack.push(captureSnapshot());
+  restoreSnapshot(redoStack.pop());
+}
 
 // ── DOM References ─────────────────────────────────
 const $sidepanel = document.getElementById('sidepanel');
@@ -285,6 +343,20 @@ function renderTable() {
   $table.innerHTML = html;
   bindTableEvents();
   updateRowDetailsPanel();
+  updateSelectionVisual();
+}
+
+function updateSelectionVisual() {
+  $table.querySelectorAll('.cell-selected').forEach(el => el.classList.remove('cell-selected'));
+  if (!state.selection) return;
+  const { r1, c1, r2, c2 } = state.selection;
+  $table.querySelectorAll('.content-cell').forEach(td => {
+    const r = +td.dataset.row;
+    const c = +td.dataset.col;
+    if (r >= r1 && r <= r2 && c >= c1 && c <= c2) {
+      td.classList.add('cell-selected');
+    }
+  });
 }
 
 function getCellValue(r, c) {
@@ -307,9 +379,26 @@ function escAttr(s) {
 // ── Table Event Binding ────────────────────────────
 function bindTableEvents() {
   $table.querySelectorAll('.content-cell').forEach((td) => {
-    td.addEventListener('click', () => {
+    td.addEventListener('click', (e) => {
       const r = +td.dataset.row;
       const c = +td.dataset.col;
+
+      // Shift+click: extend selection, do NOT cycle
+      if (e.shiftKey && state.anchor) {
+        state.selection = {
+          r1: Math.min(state.anchor.r, r),
+          c1: Math.min(state.anchor.c, c),
+          r2: Math.max(state.anchor.r, r),
+          c2: Math.max(state.anchor.c, c),
+        };
+        updateSelectionVisual();
+        return;
+      }
+
+      // Normal click: set anchor and single-cell selection
+      state.anchor = { r, c };
+      state.selection = { r1: r, c1: c, r2: r, c2: c };
+
       const cur = getCellValue(r, c);
 
       // Arrow-prefixed value (←N✓): inline edit the number instead of cycling
@@ -328,6 +417,7 @@ function bindTableEvents() {
         input.focus();
         input.select();
 
+        pushUndo();
         const commit = () => {
           const n = input.value.replace(/\D/g, '') || '0';
           const next = `←${n}✓`;
@@ -347,6 +437,7 @@ function bindTableEvents() {
           else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
         });
         input.addEventListener('blur', commit);
+        updateSelectionVisual();
         return;
       }
 
@@ -354,20 +445,40 @@ function bindTableEvents() {
       const base = cur.includes('←') ? '' : cur;
       const idx = CYCLE.indexOf(base);
       const next = CYCLE[(idx + 1) % CYCLE.length];
+      pushUndo();
       setCellValue(r, c, next);
       td.dataset.value = next;
       td.dataset.hasArrow = 'false';
       td.textContent = next;
       saveState();
+      updateSelectionVisual();
     });
 
     td.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      showContentContextMenu(e.clientX, e.clientY, +td.dataset.row, +td.dataset.col);
+      const r = +td.dataset.row;
+      const c = +td.dataset.col;
+
+      if (state.selection) {
+        const { r1, c1, r2, c2 } = state.selection;
+        const isMulti = (r2 - r1 + c2 - c1) > 0;
+        const isInside = r >= r1 && r <= r2 && c >= c1 && c <= c2;
+        if (isMulti && isInside) {
+          showBatchContextMenu(e.clientX, e.clientY);
+          return;
+        }
+      }
+
+      showContentContextMenu(e.clientX, e.clientY, r, c);
     });
   });
 
   $table.querySelectorAll('thead th').forEach((th) => {
+    th.addEventListener('click', () => {
+      state.selection = null;
+      state.anchor = null;
+      updateSelectionVisual();
+    });
     th.addEventListener('dblclick', () => startHeaderCellEdit(th));
   });
 
@@ -465,11 +576,14 @@ function bindStickyLeftInteractions() {
 // ── Row selection ──────────────────────────────────
 function selectRow(idx) {
   state.selectedRow = (state.selectedRow === idx) ? null : idx;
+  state.selection = null;
+  state.anchor = null;
   $table.querySelectorAll('.sticky-left').forEach((td) => {
     const r = +td.dataset.row;
     td.style.background = r === state.selectedRow ? 'var(--accent)' : '#fff';
   });
   updateRowDetailsPanel();
+  updateSelectionVisual();
 }
 
 // ── Row Details sidepanel ──────────────────────────
@@ -503,6 +617,7 @@ function updateRowDetailsPanel() {
 
   const nameInput = document.getElementById('rd-name');
   nameInput.addEventListener('input', () => {
+    pushUndoThrottled();
     state.rows[idx].name = nameInput.value;
     const cell = $table.querySelector(`.sticky-left[data-row="${idx}"]`);
     if (cell && !cell.classList.contains('cell-editing')) {
@@ -512,6 +627,7 @@ function updateRowDetailsPanel() {
   });
 
   document.getElementById('rd-bold').addEventListener('click', () => {
+    pushUndo();
     state.rows[idx].bold = !state.rows[idx].bold;
     nameInput.style.fontWeight = state.rows[idx].bold ? '700' : '400';
     renderTable();
@@ -519,6 +635,7 @@ function updateRowDetailsPanel() {
   });
 
   document.getElementById('rd-underline').addEventListener('click', () => {
+    pushUndo();
     state.rows[idx].underline = !state.rows[idx].underline;
     nameInput.style.textDecoration = state.rows[idx].underline ? 'underline' : 'none';
     renderTable();
@@ -528,6 +645,7 @@ function updateRowDetailsPanel() {
   document.getElementById('rd-move-btn').addEventListener('click', () => {
     const target = Math.max(1, Math.min(state.rows.length, +document.getElementById('rd-move-target').value || 1)) - 1;
     if (target !== idx) {
+      pushUndo();
       state.selectedRow = target;
       moveRow(idx, target);
       renderTable();
@@ -536,6 +654,7 @@ function updateRowDetailsPanel() {
   });
 
   document.getElementById('rd-delete').addEventListener('click', () => {
+    pushUndo();
     deleteRow(idx);
   });
 }
@@ -543,6 +662,7 @@ function updateRowDetailsPanel() {
 // ── Inline Editing: Sticky-left cells ──────────────
 function startStickyLeftEdit(cell, rowIdx) {
   if (cell.classList.contains('cell-editing')) return;
+  pushUndo();
   const row = state.rows[rowIdx];
   const oldText = row.name;
 
@@ -568,6 +688,7 @@ function startStickyLeftEdit(cell, rowIdx) {
   if (row.bold) btnBold.classList.add('active');
   btnBold.addEventListener('mousedown', (e) => {
     e.preventDefault();
+    pushUndo();
     row.bold = !row.bold;
     btnBold.classList.toggle('active', row.bold);
     input.style.fontWeight = row.bold ? '700' : '400';
@@ -580,6 +701,7 @@ function startStickyLeftEdit(cell, rowIdx) {
   if (row.underline) btnUnderline.classList.add('active');
   btnUnderline.addEventListener('mousedown', (e) => {
     e.preventDefault();
+    pushUndo();
     row.underline = !row.underline;
     btnUnderline.classList.toggle('active', row.underline);
     input.style.textDecoration = row.underline ? 'underline' : 'none';
@@ -620,6 +742,7 @@ function startStickyLeftEdit(cell, rowIdx) {
 // ── Inline Editing: Header cells ───────────────────
 function startHeaderCellEdit(cell) {
   if (cell.classList.contains('cell-editing')) return;
+  pushUndo();
   const oldText = cell.textContent;
   cell.classList.add('cell-editing');
   const input = document.createElement('input');
@@ -746,6 +869,7 @@ function finishRowDrag() {
   tr.classList.remove('drag-hidden');
 
   if (gapIdx !== null && gapIdx !== rowIdx && gapIdx !== rowIdx + 1) {
+    pushUndo();
     const from = rowIdx;
     const to = gapIdx > from ? gapIdx - 1 : gapIdx;
     if (state.selectedRow === from) state.selectedRow = to;
@@ -810,6 +934,58 @@ function positionMenu(menu, _x, _y) {
   setTimeout(() => document.addEventListener('click', hideContextMenu, { once: true }), 0);
 }
 
+function batchSetSelection(valueFn) {
+  if (!state.selection) return;
+  pushUndo();
+  const { r1, c1, r2, c2 } = state.selection;
+  for (let r = r1; r <= r2; r++) {
+    for (let c = c1; c <= c2; c++) {
+      const val = typeof valueFn === 'function' ? valueFn(r, c) : valueFn;
+      setCellValue(r, c, val);
+    }
+  }
+  renderTable();
+  saveState();
+}
+
+function showBatchContextMenu(x, y) {
+  hideContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+
+  const items = [
+    { label: 'Set all ✓', action: () => batchSetSelection('✓') },
+    { label: 'Set all ×', action: () => batchSetSelection('×') },
+    { label: 'Set all 〇', action: () => batchSetSelection('〇') },
+    { label: 'Set all —', action: () => batchSetSelection('—') },
+    { label: 'Clear all', action: () => batchSetSelection('') },
+    { label: 'sep' },
+    { label: 'Set ←N✓', action: () => batchSetSelection((r, c) => {
+      let count = 0;
+      for (let cc = 0; cc <= c; cc++) {
+        const v = getCellValue(r, cc);
+        if (v === '✓' || v.includes('✓')) count++;
+      }
+      return `←${count}✓`;
+    })},
+  ];
+
+  items.forEach((item) => {
+    if (item.label === 'sep') {
+      const s = document.createElement('div'); s.className = 'context-menu-sep'; menu.appendChild(s); return;
+    }
+    const div = document.createElement('div');
+    div.className = 'context-menu-item';
+    div.textContent = item.label;
+    div.addEventListener('click', () => { item.action(); hideContextMenu(); });
+    menu.appendChild(div);
+  });
+
+  positionMenu(menu, x, y);
+}
+
 function showContentContextMenu(x, y, row, col) {
   hideContextMenu();
   const menu = document.createElement('div');
@@ -824,13 +1000,13 @@ function showContentContextMenu(x, y, row, col) {
   }
 
   [
-    { label: `Set ←${checkCount}✓`, action: () => { setCellValue(row, col, `←${checkCount}✓`); renderTable(); saveState(); } },
+    { label: `Set ←${checkCount}✓`, action: () => { pushUndo(); setCellValue(row, col, `←${checkCount}✓`); renderTable(); saveState(); } },
     { label: 'sep' },
-    { label: '✓', action: () => { setCellValue(row, col, '✓'); renderTable(); saveState(); } },
-    { label: '×', action: () => { setCellValue(row, col, '×'); renderTable(); saveState(); } },
-    { label: '〇', action: () => { setCellValue(row, col, '〇'); renderTable(); saveState(); } },
-    { label: '—', action: () => { setCellValue(row, col, '—'); renderTable(); saveState(); } },
-    { label: 'Clear', action: () => { setCellValue(row, col, ''); renderTable(); saveState(); } },
+    { label: '✓', action: () => { pushUndo(); setCellValue(row, col, '✓'); renderTable(); saveState(); } },
+    { label: '×', action: () => { pushUndo(); setCellValue(row, col, '×'); renderTable(); saveState(); } },
+    { label: '〇', action: () => { pushUndo(); setCellValue(row, col, '〇'); renderTable(); saveState(); } },
+    { label: '—', action: () => { pushUndo(); setCellValue(row, col, '—'); renderTable(); saveState(); } },
+    { label: 'Clear', action: () => { pushUndo(); setCellValue(row, col, ''); renderTable(); saveState(); } },
   ].forEach((item) => {
     if (item.label === 'sep') {
       const s = document.createElement('div'); s.className = 'context-menu-sep'; menu.appendChild(s); return;
@@ -862,7 +1038,7 @@ function showRowContextMenu(x, y, rowIdx) {
   const del = document.createElement('div');
   del.className = 'context-menu-item destructive';
   del.textContent = 'Delete row';
-  del.addEventListener('click', () => { deleteRow(rowIdx); hideContextMenu(); });
+  del.addEventListener('click', () => { pushUndo(); deleteRow(rowIdx); hideContextMenu(); });
   menu.appendChild(del);
 
   positionMenu(menu, x, y);
@@ -872,6 +1048,7 @@ function showRowContextMenu(x, y, rowIdx) {
   const doMove = () => {
     const target = Math.max(1, Math.min(state.rows.length, +moveInput.value || 1)) - 1;
     if (target !== rowIdx) {
+      pushUndo();
       if (state.selectedRow === rowIdx) state.selectedRow = target;
       moveRow(rowIdx, target);
       renderTable();
@@ -909,7 +1086,20 @@ document.addEventListener('touchstart', (e) => {
   const touch = e.touches[0];
   longPressTimer = setTimeout(() => {
     longPressTimer = null;
-    showContentContextMenu(touch.clientX, touch.clientY, +td.dataset.row, +td.dataset.col);
+    const r = +td.dataset.row;
+    const c = +td.dataset.col;
+
+    if (state.selection) {
+      const { r1, c1, r2, c2 } = state.selection;
+      const isMulti = (r2 - r1 + c2 - c1) > 0;
+      const isInside = r >= r1 && r <= r2 && c >= c1 && c <= c2;
+      if (isMulti && isInside) {
+        showBatchContextMenu(touch.clientX, touch.clientY);
+        return;
+      }
+    }
+
+    showContentContextMenu(touch.clientX, touch.clientY, r, c);
   }, 500);
 }, { passive: true });
 
@@ -983,6 +1173,7 @@ function bindPatternEvents() {
       const isStandard = (t) => t !== '自訂' && t !== '映射';
 
       if (oldType === newType) return;
+      pushUndo();
 
       // Clean old type fields
       if (isStandard(oldType)) {
@@ -1012,6 +1203,7 @@ function bindPatternEvents() {
   // Standard pattern controls
   $patternList.querySelectorAll('.pat-start').forEach((input) => {
     input.addEventListener('input', () => {
+      pushUndoThrottled();
       state.headerPatterns[+input.dataset.index].start = +input.value || 0;
       renderTable();
       saveState();
@@ -1020,6 +1212,7 @@ function bindPatternEvents() {
 
   $patternList.querySelectorAll('.pat-step').forEach((input) => {
     input.addEventListener('input', () => {
+      pushUndoThrottled();
       const raw = input.value.replace(/^\+/, '');
       const val = parseInt(raw, 10);
       state.headerPatterns[+input.dataset.index].step = isNaN(val) ? 1 : val;
@@ -1035,6 +1228,7 @@ function bindPatternEvents() {
   // 映射 source dropdown
   $patternList.querySelectorAll('.pat-source').forEach((sel) => {
     sel.addEventListener('change', () => {
+      pushUndo();
       const i = +sel.dataset.index;
       state.headerPatterns[i].sourceIndex = +sel.value;
       renderTable();
@@ -1069,6 +1263,7 @@ function bindPatternEvents() {
   // Force-reinitialise per type
   $patternList.querySelectorAll('.pat-reset').forEach((btn) => {
     btn.addEventListener('click', () => {
+      pushUndo();
       const i = +btn.dataset.index;
       const hp = state.headerPatterns[i];
       if (hp.pattern === '自訂') {
@@ -1099,6 +1294,7 @@ function bindPatternEvents() {
     btn.addEventListener('click', () => {
       const i = +btn.dataset.index;
       if (state.headerPatterns.length <= 1) return;
+      pushUndo();
       state.headerPatterns.splice(i, 1);
 
       // Cascade: fix 映射 sourceIndex references
@@ -1157,6 +1353,7 @@ function buildCustomEditor(patIndex) {
       inp.type = 'text';
       inp.value = val;
       inp.addEventListener('input', () => {
+        pushUndoThrottled();
         hp.values[vi] = inp.value;
         renderTable();
         saveState();
@@ -1168,6 +1365,7 @@ function buildCustomEditor(patIndex) {
       del.textContent = '✕';
       del.disabled = hp.values.length <= 1;
       del.addEventListener('click', () => {
+        pushUndo();
         hp.values.splice(vi, 1);
         rebuild();
         updateEditorButton();
@@ -1182,6 +1380,7 @@ function buildCustomEditor(patIndex) {
     addBtn.className = 'btn btn-sm';
     addBtn.textContent = '+ Add value';
     addBtn.addEventListener('click', () => {
+      pushUndo();
       hp.values.push('');
       rebuild();
       updateEditorButton();
@@ -1229,6 +1428,7 @@ function buildMappingEditor(patIndex) {
       keyInp.addEventListener('blur', () => {
         const newKey = keyInp.value;
         if (newKey !== originalKey) {
+          pushUndo();
           delete hp.mappings[originalKey];
           if (newKey !== '') {
             hp.mappings[newKey] = val;
@@ -1250,6 +1450,7 @@ function buildMappingEditor(patIndex) {
       valInp.type = 'text';
       valInp.value = val;
       valInp.addEventListener('input', () => {
+        pushUndoThrottled();
         hp.mappings[key] = valInp.value;
         renderTable();
         saveState();
@@ -1260,6 +1461,7 @@ function buildMappingEditor(patIndex) {
       del.className = 'pattern-item-btn';
       del.textContent = '✕';
       del.addEventListener('click', () => {
+        pushUndo();
         delete hp.mappings[key];
         rebuild();
         updateEditorButton();
@@ -1274,6 +1476,7 @@ function buildMappingEditor(patIndex) {
     addBtn.className = 'btn btn-sm';
     addBtn.textContent = '+ Add mapping';
     addBtn.addEventListener('click', () => {
+      pushUndo();
       hp.mappings[''] = '';
       rebuild();
       updateEditorButton();
@@ -1301,8 +1504,16 @@ function setZoom(z) {
 
 // Keyboard: Cmd +/- / 0
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    state.selection = null;
+    state.anchor = null;
+    updateSelectionVisual();
+  }
   if (!(e.ctrlKey || e.metaKey)) return;
-  if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(state.zoom + 0.1); }
+  if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
+  else if (e.key === 'y') { e.preventDefault(); redo(); }
+  else if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(state.zoom + 0.1); }
   else if (e.key === '-') { e.preventDefault(); setZoom(state.zoom - 0.1); }
   else if (e.key === '0') { e.preventDefault(); setZoom(1); }
 });
@@ -1370,6 +1581,7 @@ function bindSidepanelControls() {
   });
 
   $colCount.addEventListener('input', () => {
+    pushUndoThrottled();
     state.cols = Math.max(1, Math.min(366, +$colCount.value || 1));
     renderTable();
     saveState();
@@ -1394,6 +1606,7 @@ function bindSidepanelControls() {
   });
 
   $addPattern.addEventListener('click', () => {
+    pushUndo();
     state.headerPatterns.push({ pattern: '数字', start: 1, step: 1 });
     renderPatternList();
     renderTable();
@@ -1401,6 +1614,7 @@ function bindSidepanelControls() {
   });
 
   $addRowItem.addEventListener('click', () => {
+    pushUndo();
     state.rows.push({ name: `Item ${state.rows.length + 1}`, bold: false, underline: false });
     renderTable();
     saveState();
@@ -1637,12 +1851,15 @@ async function handleImport() {
       }
     }
 
+    pushUndo();
     state.cols = numCols || state.cols;
     state.rows = newRows.length > 0 ? newRows : state.rows;
     state.cells = newCells;
     state.headerPatterns = newPatterns.length > 0 ? newPatterns : state.headerPatterns;
     state.headerOverrides = newOverrides;
     state.selectedRow = null;
+    state.selection = null;
+    state.anchor = null;
 
     $colCount.value = state.cols;
     renderPatternList();
@@ -1806,6 +2023,8 @@ function saveState() {
   try {
     const s = { ...state };
     delete s.selectedRow;
+    delete s.selection;
+    delete s.anchor;
     localStorage.setItem('daakaa-state', JSON.stringify(s));
   } catch (_) {}
 }
@@ -1844,8 +2063,11 @@ function syncSidepanelFromState() {
 $wrapper.addEventListener('click', (e) => {
   if (e.target === e.currentTarget || e.target === $table) {
     state.selectedRow = null;
+    state.selection = null;
+    state.anchor = null;
     $table.querySelectorAll('.sticky-left').forEach((td) => { td.style.background = '#fff'; });
     updateRowDetailsPanel();
+    updateSelectionVisual();
   }
 });
 

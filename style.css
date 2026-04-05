@@ -573,6 +573,14 @@ details[open] > .panel-header::before {
   user-select: none;
 }
 
+.spreadsheet .content-cell.cell-selected {
+  background: rgba(0,0,0,0.08);
+}
+
+.spreadsheet.alt-cols td.content-cell.cell-selected:nth-child(even) {
+  background: rgba(0,0,0,0.12);
+}
+
 .spreadsheet .content-cell:hover {
   background: rgba(0,0,0,0.06);
   outline: 1px solid #000;
