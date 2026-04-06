@@ -2674,7 +2674,7 @@ function init() {
         $sidepanel.classList.remove('collapsed');
         $sidepanel.style.width = newW + 'px';
         $sidepanel.style.minWidth = newW + 'px';
-        $sidepanelToggle.textContent = '›';
+        $sidepanelToggle.textContent = '⋮';
         $sidepanelToggle.style.cursor = 'col-resize';
       }
     };
@@ -2693,7 +2693,7 @@ function init() {
         } else {
           $sidepanel.style.width = _lastSidepanelWidth + 'px';
           $sidepanel.style.minWidth = _lastSidepanelWidth + 'px';
-          $sidepanelToggle.textContent = '›';
+          $sidepanelToggle.textContent = '⋮';
           $sidepanelToggle.style.cursor = 'col-resize';
         }
       }
@@ -2708,7 +2708,7 @@ function init() {
     $sidepanel.classList.remove('collapsed');
     $sidepanel.style.width = _lastSidepanelWidth + 'px';
     $sidepanel.style.minWidth = _lastSidepanelWidth + 'px';
-    $sidepanelToggle.textContent = '›';
+    $sidepanelToggle.textContent = '⋮';
     $sidepanelToggle.style.cursor = 'col-resize';
   });
 
