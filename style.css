@@ -495,7 +495,7 @@ details[open]>.panel-header::before {
 
 /* Last header row: strong bottom border at content boundary */
 .spreadsheet thead tr:last-child th {
-	border-bottom: 2px solid var(--border-strong);
+	border-bottom: calc(2px * var(--zoom)) solid var(--border-strong);
 }
 
 /* ── Sticky left column ─────────────────────────── */
@@ -513,7 +513,7 @@ details[open]>.panel-header::before {
 	min-width: 80px;
 	max-width: 200px;
 	width: auto;
-	border-right: 2px solid var(--border-strong);
+	border-right: calc(2px * var(--zoom)) solid var(--border-strong);
 }
 
 /* ── Corner cell ────────────────────────────────── */
@@ -529,12 +529,12 @@ details[open]>.panel-header::before {
 	padding: 0 10px;
 	min-width: 80px;
 	border-bottom: 1px solid var(--border);
-	border-right: 2px solid var(--border-strong);
+	border-right: calc(2px * var(--zoom)) solid var(--border-strong);
 }
 
 /* Last-row corner: also strong bottom border at content boundary */
 .spreadsheet thead tr:last-child .corner-cell {
-	border-bottom: 2px solid var(--border-strong);
+	border-bottom: calc(2px * var(--zoom)) solid var(--border-strong);
 }
 
 /* ── Editable cell (double-click state) ─────────── */
@@ -941,7 +941,7 @@ details[open]>.panel-header::before {
 [data-color-target="all"] .spreadsheet .sticky-left {
 	background: var(--t3-solid);
 	color: var(--accent-text);
-	border-right: 2px solid var(--border-strong);
+	border-right: calc(2px * var(--zoom)) solid var(--border-strong);
 }
 
 /* ── View mode (drag-to-pan) ───────────────────── */
