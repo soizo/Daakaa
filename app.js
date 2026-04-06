@@ -525,6 +525,7 @@ function renderTable() {
     }
     html += '</tr>';
   }
+  html += `<tr class="add-row-strip"><td colspan="${cols + 1}" class="add-row-cell"></td></tr>`;
   html += '</tbody>';
 
   $table.innerHTML = html;
@@ -679,6 +680,16 @@ function bindTableEvents() {
     });
     th.addEventListener('dblclick', () => startHeaderCellEdit(th));
   });
+
+  const addRowCell = $table.querySelector('.add-row-cell');
+  if (addRowCell) {
+    addRowCell.addEventListener('click', () => {
+      commitUndoNode('Add row');
+      state.rows.push({ name: `Item ${state.rows.length + 1}`, bold: false, underline: false });
+      renderTable();
+      saveState();
+    });
+  }
 
   bindStickyLeftInteractions();
 }
