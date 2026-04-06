@@ -320,7 +320,14 @@ function updateLayoutMode() {
   isBottomMode = mql.matches;
 
   if (isBottomMode && !wasBottom) {
-    // Entering bottom mode — save current open states, then force all open
+    // Entering bottom mode — save desktop width, clear inline width/height
+    if (!$sidepanel.classList.contains('collapsed')) {
+      _lastSidepanelWidth = $sidepanel.offsetWidth || _lastSidepanelWidth;
+    }
+    $sidepanel.style.width = '';
+    $sidepanel.style.minWidth = '';
+    $sidepanel.style.height = _lastBottomPanelHeight + 'px';
+    // Save current open states, then force all open
     document.querySelectorAll('.sidepanel-content .panel').forEach(p => {
       _savedPanelStates[p.dataset.tabId] = p.open;
       p.open = true;
@@ -332,7 +339,13 @@ function updateLayoutMode() {
     }
     setActiveTab(activeTab || 'sheet');
   } else if (!isBottomMode && wasBottom) {
-    // Leaving bottom mode — restore saved open states
+    // Leaving bottom mode — clear inline height from bottom-panel drag,
+    // restore width/minWidth for desktop, and restore saved open states
+    $sidepanel.style.height = '';
+    if (!$sidepanel.classList.contains('collapsed')) {
+      $sidepanel.style.width = _lastSidepanelWidth + 'px';
+      $sidepanel.style.minWidth = _lastSidepanelWidth + 'px';
+    }
     document.querySelectorAll('.sidepanel-content .panel').forEach(p => {
       if (_savedPanelStates.hasOwnProperty(p.dataset.tabId)) {
         p.open = _savedPanelStates[p.dataset.tabId];
@@ -364,6 +377,7 @@ function setActiveTab(tabId) {
 }
 
 let _lastBottomPanelHeight = 240;
+let _lastSidepanelWidth = 280;
 
 // ── Focus Gate ─────────────────────────────────────
 // When the page regains focus, the first click only refocuses — no action.
@@ -2636,7 +2650,6 @@ function init() {
   renderHistoryPanel();
 
   // Combined sidepanel drag+click logic
-  let _lastSidepanelWidth = 280;
 
   $sidepanelToggle.addEventListener('mousedown', (e) => {
     if (isBottomMode) return;
