@@ -310,6 +310,46 @@ const $btnProjImport = document.getElementById('btn-proj-import');
 const $projFileInput = document.getElementById('proj-file-input');
 const $rowDetailsBody = document.getElementById('row-details-body');
 
+// ── Bottom Mode (responsive) ──────────────────────
+let isBottomMode = false;
+const mql = window.matchMedia('(max-width: 768px)');
+
+function updateLayoutMode() {
+  isBottomMode = mql.matches;
+  if (isBottomMode) {
+    // Set initial active tab from first open <details>
+    const panels = document.querySelectorAll('.sidepanel-content .panel');
+    let found = false;
+    panels.forEach(p => {
+      if (p.open && !found) {
+        found = true;
+        setActiveTab(p.dataset.tabId);
+      }
+    });
+    if (!found) setActiveTab('sheet');
+  }
+}
+
+mql.addEventListener('change', updateLayoutMode);
+
+function setActiveTab(tabId) {
+  // Update tab buttons
+  document.querySelectorAll('.bottom-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabId);
+  });
+  // Update panels
+  document.querySelectorAll('.sidepanel-content .panel').forEach(p => {
+    p.classList.toggle('active-tab', p.dataset.tabId === tabId);
+  });
+  // Expand sidepanel if collapsed
+  if ($sidepanel.classList.contains('collapsed') && isBottomMode) {
+    $sidepanel.classList.remove('collapsed');
+    $sidepanel.style.height = _lastBottomPanelHeight + 'px';
+  }
+}
+
+let _lastBottomPanelHeight = 240;
+
 // ── Focus Gate ─────────────────────────────────────
 // When the page regains focus, the first click only refocuses — no action.
 // mousedown is NOT blocked so focus transfer and scroll targeting work normally.
@@ -2584,6 +2624,7 @@ function init() {
   let _lastSidepanelWidth = 280;
 
   $sidepanelToggle.addEventListener('mousedown', (e) => {
+    if (isBottomMode) return;
     if ($sidepanel.classList.contains('collapsed')) return;
     e.preventDefault();
     const startX = e.clientX;
@@ -2691,6 +2732,76 @@ function init() {
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
+
+  // ── Bottom panel: tab click handlers ──────────────
+  document.querySelectorAll('.bottom-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.dataset.tab;
+      if (btn.classList.contains('active') && isBottomMode) {
+        // Clicking active tab = toggle collapse
+        if ($sidepanel.classList.contains('collapsed')) {
+          $sidepanel.classList.remove('collapsed');
+          $sidepanel.style.height = _lastBottomPanelHeight + 'px';
+        } else {
+          _lastBottomPanelHeight = $sidepanel.offsetHeight;
+          $sidepanel.classList.add('collapsed');
+          $sidepanel.style.height = '';
+        }
+      } else {
+        setActiveTab(tabId);
+      }
+    });
+  });
+
+  // ── Bottom panel: drag-to-resize ──────────────────
+  const $bottomHandle = document.querySelector('.bottom-panel-handle');
+  if ($bottomHandle) {
+    $bottomHandle.addEventListener('pointerdown', (e) => {
+      if (!isBottomMode) return;
+      e.preventDefault();
+      const startY = e.clientY;
+      const startH = $sidepanel.offsetHeight;
+      let moved = false;
+
+      const onMove = (ev) => {
+        moved = true;
+        const delta = startY - ev.clientY; // dragging up = taller
+        const newH = Math.max(60, Math.min(window.innerHeight * 0.7, startH + delta));
+        if (newH <= 60) {
+          $sidepanel.classList.add('collapsed');
+          $sidepanel.style.height = '';
+          _lastBottomPanelHeight = startH;
+        } else {
+          $sidepanel.classList.remove('collapsed');
+          $sidepanel.style.height = newH + 'px';
+        }
+      };
+
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        if (!moved) {
+          // Click: toggle collapse
+          if ($sidepanel.classList.contains('collapsed')) {
+            $sidepanel.classList.remove('collapsed');
+            $sidepanel.style.height = _lastBottomPanelHeight + 'px';
+          } else {
+            _lastBottomPanelHeight = $sidepanel.offsetHeight;
+            $sidepanel.classList.add('collapsed');
+            $sidepanel.style.height = '';
+          }
+        } else if (!$sidepanel.classList.contains('collapsed')) {
+          _lastBottomPanelHeight = $sidepanel.offsetHeight;
+        }
+      };
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  }
+
+  // ── Bottom mode: initial layout detection ─────────
+  updateLayoutMode();
 
 }
 

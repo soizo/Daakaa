@@ -29,11 +29,19 @@
     <!-- Sidepanel (right, order:2 in CSS) -->
     <aside id="sidepanel" class="sidepanel">
       <button id="sidepanel-toggle" class="sidepanel-tab" title="Toggle panel">›</button>
+      <div class="bottom-panel-handle"></div>
+      <div class="bottom-panel-tabs">
+        <button class="bottom-tab active" data-tab="sheet">Sheet</button>
+        <button class="bottom-tab" data-tab="style">Style</button>
+        <button class="bottom-tab" data-tab="header">Header</button>
+        <button class="bottom-tab" data-tab="rows">Rows</button>
+        <button class="bottom-tab" data-tab="hist">Hist</button>
+      </div>
       <div class="sidepanel-content">
         <h2 class="sidepanel-title">Daakaa</h2>
 
         <!-- Spreadsheet Options -->
-        <details class="panel" open>
+        <details class="panel" data-tab-id="sheet" data-tab-label="Sheet" open>
           <summary class="panel-header">Spreadsheet</summary>
           <div class="panel-body">
             <label class="field">
@@ -52,7 +60,7 @@
         </details>
 
         <!-- Style Options -->
-        <details class="panel">
+        <details class="panel" data-tab-id="style" data-tab-label="Style">
           <summary class="panel-header">Style</summary>
           <div class="panel-body">
             <label class="field">
@@ -79,7 +87,7 @@
         </details>
 
         <!-- Header Patterns -->
-        <details class="panel" open>
+        <details class="panel" data-tab-id="header" data-tab-label="Header" open>
           <summary class="panel-header">Header Patterns</summary>
           <div class="panel-body">
             <div id="pattern-list"></div>
@@ -90,7 +98,7 @@
         </details>
 
         <!-- Row Details -->
-        <details class="panel" open>
+        <details class="panel" data-tab-id="rows" data-tab-label="Rows" open>
           <summary class="panel-header">Row Details</summary>
           <div class="panel-body">
             <div id="row-details-body">
@@ -103,7 +111,7 @@
         </details>
 
         <!-- History (undo tree) -->
-        <details class="panel">
+        <details class="panel" data-tab-id="hist" data-tab-label="Hist">
           <summary class="panel-header">History</summary>
           <div class="panel-body">
             <div id="history-panel" class="history-panel"></div>
