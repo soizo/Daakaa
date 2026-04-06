@@ -317,6 +317,10 @@ const mql = window.matchMedia('(max-width: 768px)');
 function updateLayoutMode() {
   isBottomMode = mql.matches;
   if (isBottomMode) {
+    // Force all panels open so content is visible when tabs switch
+    document.querySelectorAll('.sidepanel-content .panel').forEach(p => {
+      p.open = true;
+    });
     // Set initial active tab from first open <details>
     const panels = document.querySelectorAll('.sidepanel-content .panel');
     let found = false;
@@ -340,6 +344,9 @@ function setActiveTab(tabId) {
   // Update panels
   document.querySelectorAll('.sidepanel-content .panel').forEach(p => {
     p.classList.toggle('active-tab', p.dataset.tabId === tabId);
+    if (p.dataset.tabId === tabId) {
+      p.open = true;  // Force open so content is visible
+    }
   });
   // Expand sidepanel if collapsed
   if ($sidepanel.classList.contains('collapsed') && isBottomMode) {

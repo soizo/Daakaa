@@ -1036,9 +1036,9 @@ details[open]>.panel-header::before {
 		top: 3px;
 		left: 50%;
 		transform: translateX(-50%);
-		width: 32px;
+		width: 36px;
 		height: 3px;
-		background: var(--border);
+		background: rgba(0,0,0,0.25);
 		border-radius: 2px;
 	}
 
@@ -1046,32 +1046,38 @@ details[open]>.panel-header::before {
 		display: flex;
 		flex-shrink: 0;
 		height: 32px;
+		background: var(--t3-solid);
 		border-bottom: 1px solid var(--border);
 	}
 
 	.bottom-tab {
 		flex: 1 1 0;
 		border: none;
-		background: #fff;
+		background: transparent;
 		font-family: var(--font);
-		font-size: 11px;
+		font-size: 12px;
+		font-weight: 400;
 		cursor: pointer;
 		color: #000;
+		opacity: 0.55;
 		border-bottom: 2px solid transparent;
 		padding: 0;
 	}
 
 	.bottom-tab:hover {
-		background: var(--t2);
+		background: var(--t4);
+		opacity: 0.8;
 	}
 
 	.bottom-tab.active {
 		border-bottom-color: #000;
+		font-weight: 600;
+		opacity: 1;
 	}
 
 	/* Sidepanel content in bottom mode */
 	.sidepanel-content {
-		padding: 12px 16px;
+		padding: 0;
 	}
 
 	.sidepanel.collapsed .sidepanel-content {
@@ -1101,7 +1107,7 @@ details[open]>.panel-header::before {
 
 	/* The panel body doesn't need extra wrapper */
 	.sidepanel-content .panel.active-tab > .panel-body {
-		padding: 0;
+		padding: 10px;
 	}
 
 	.editor {
