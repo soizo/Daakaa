@@ -636,7 +636,7 @@ function bindTableEvents() {
         const base = cur.includes('←') ? '' : cur;
         const idx = CYCLE.indexOf(base);
         const next = CYCLE[(idx + 1) % CYCLE.length];
-        commitUndoNode('Toggle cell');
+        commitUndoNodeThrottled('Toggle cell');
         setCellValue(r, c, next);
         td.dataset.value = next;
         td.dataset.hasArrow = 'false';
