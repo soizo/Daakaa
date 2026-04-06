@@ -584,9 +584,10 @@ function bindTableEvents() {
         return;
       }
 
-      // Normal click: set anchor and single-cell selection
+      // Normal click: set anchor only (no visible selection)
       state.anchor = { r, c };
-      state.selection = { r1: r, c1: c, r2: r, c2: c };
+      state.selection = null;
+      updateSelectionVisual();
 
       if (!state.viewMode) {
         const cur = getCellValue(r, c);
