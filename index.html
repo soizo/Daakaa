@@ -44,6 +44,10 @@
               <button id="btn-import" class="btn btn-sm">Import .xlsx</button>
               <button id="btn-export" class="btn btn-sm">Export .xlsx</button>
             </div>
+            <div class="btn-row" style="margin-top:4px;">
+              <button id="btn-proj-export" class="btn btn-sm">Export project</button>
+              <button id="btn-proj-import" class="btn btn-sm">Import project</button>
+            </div>
           </div>
         </details>
 
@@ -122,6 +126,8 @@
 
   <!-- Hidden file input for xlsx import -->
   <input type="file" id="xlsx-file-input" accept=".xlsx,.xls" style="display:none;">
+  <!-- Hidden file input for project import -->
+  <input type="file" id="proj-file-input" accept=".daakaa,.json" style="display:none;">
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>

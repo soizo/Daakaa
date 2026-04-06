@@ -94,6 +94,17 @@ function restoreSnapshot(snapshot) {
   saveState();
 }
 
+function saveUndoTree() {
+  try {
+    localStorage.setItem('daakaa-undo-tree', JSON.stringify({
+      undoTree,
+      undoCurrentId,
+      undoNextId,
+      lastVisitedChild,
+    }));
+  } catch (_) {}
+}
+
 function createRootNode() {
   const id = 0;
   undoTree = { [id]: {
@@ -126,6 +137,7 @@ function commitUndoNode(actionLabel) {
 
   pruneTree();
   renderHistoryPanel();
+  saveUndoTree();
 }
 
 let _lastCommitTime = 0;
@@ -138,6 +150,7 @@ function commitUndoNodeThrottled(actionLabel) {
     _lastCommitLabel = actionLabel;
   } else {
     undoTree[undoCurrentId].snapshot = captureSnapshot();
+    saveUndoTree();
   }
 }
 
@@ -148,6 +161,7 @@ function undo() {
   undoCurrentId = current.parentId;
   restoreSnapshot(undoTree[undoCurrentId].snapshot);
   renderHistoryPanel();
+  saveUndoTree();
 }
 
 function redo() {
@@ -159,6 +173,7 @@ function redo() {
   undoCurrentId = nextId;
   restoreSnapshot(undoTree[undoCurrentId].snapshot);
   renderHistoryPanel();
+  saveUndoTree();
 }
 
 function jumpToNode(id) {
@@ -166,6 +181,7 @@ function jumpToNode(id) {
   undoCurrentId = id;
   restoreSnapshot(undoTree[id].snapshot);
   renderHistoryPanel();
+  saveUndoTree();
 }
 
 // ── Undo Tree: pruning ────────────────────────────
@@ -289,6 +305,9 @@ const $altColsToggle = document.getElementById('alt-cols-toggle');
 const $btnImport = document.getElementById('btn-import');
 const $btnExport = document.getElementById('btn-export');
 const $fileInput = document.getElementById('xlsx-file-input');
+const $btnProjExport = document.getElementById('btn-proj-export');
+const $btnProjImport = document.getElementById('btn-proj-import');
+const $projFileInput = document.getElementById('proj-file-input');
 const $rowDetailsBody = document.getElementById('row-details-body');
 
 // ── Focus Gate ─────────────────────────────────────
@@ -1962,6 +1981,10 @@ function bindSidepanelControls() {
   $btnImport.addEventListener('click', () => $fileInput.click());
   $fileInput.addEventListener('change', handleImport);
   $btnExport.addEventListener('click', handleExport);
+
+  $btnProjExport.addEventListener('click', handleProjectExport);
+  $btnProjImport.addEventListener('click', () => $projFileInput.click());
+  $projFileInput.addEventListener('change', handleProjectImport);
 }
 
 // ── Style Application ──────────────────────────────
@@ -2001,7 +2024,7 @@ function applyStyles() {
 }
 
 // ── Confirm Dialog ─────────────────────────────────
-function showConfirm(msg) {
+function showConfirm(msg, yesLabel = 'Overwrite', noLabel = 'Cancel') {
   return new Promise((resolve) => {
     const overlay = document.getElementById('confirm-overlay');
     document.getElementById('confirm-msg').textContent = msg;
@@ -2009,6 +2032,8 @@ function showConfirm(msg) {
 
     const yes = document.getElementById('confirm-yes');
     const no = document.getElementById('confirm-no');
+    yes.textContent = yesLabel;
+    no.textContent = noLabel;
 
     const cleanup = () => { overlay.style.display = 'none'; yes.onclick = null; no.onclick = null; };
     yes.onclick = () => { cleanup(); resolve(true); };
@@ -2026,6 +2051,104 @@ function tableHasContent() {
     if (row.name && !row.name.match(/^Item \d+$/)) return true;
   }
   return false;
+}
+
+// ── Project Export (.daakaa) ───────────────────────
+async function handleProjectExport() {
+  const includeHistory = await showConfirm('Include undo history in export?', 'Yes', 'No');
+
+  const project = {
+    version: 1,
+    timestamp: Date.now(),
+    cols: state.cols,
+    rows: state.rows,
+    cells: state.cells,
+    headerPatterns: state.headerPatterns,
+    headerOverrides: state.headerOverrides,
+    font: state.font,
+    color: state.color,
+    colorTarget: state.colorTarget,
+    altCols: state.altCols,
+    zoom: state.zoom,
+  };
+
+  if (includeHistory) {
+    project.history = {
+      undoTree,
+      undoCurrentId,
+      undoNextId,
+      lastVisitedChild,
+    };
+  }
+
+  const json = JSON.stringify(project, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'daakaa-project.daakaa';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Project Import (.daakaa) ───────────────────────
+async function handleProjectImport() {
+  const file = $projFileInput.files[0];
+  if (!file) return;
+  $projFileInput.value = '';
+
+  if (tableHasContent()) {
+    const ok = await showConfirm('The current project has data. Overwrite?');
+    if (!ok) return;
+  }
+
+  const text = await file.text();
+  try {
+    const project = JSON.parse(text);
+
+    // Restore document state
+    if (project.cols) state.cols = project.cols;
+    if (project.rows) state.rows = project.rows;
+    if (project.cells) state.cells = project.cells;
+    if (project.headerPatterns) state.headerPatterns = project.headerPatterns;
+    if (project.headerOverrides) state.headerOverrides = project.headerOverrides;
+
+    // Restore settings
+    if (project.font) state.font = project.font;
+    if (project.color) state.color = project.color;
+    if (project.colorTarget) state.colorTarget = project.colorTarget;
+    if (typeof project.altCols === 'boolean') state.altCols = project.altCols;
+    if (typeof project.zoom === 'number') state.zoom = project.zoom;
+
+    // Restore history if present
+    if (project.history) {
+      undoTree = project.history.undoTree || {};
+      undoCurrentId = project.history.undoCurrentId ?? 0;
+      undoNextId = project.history.undoNextId ?? 1;
+      lastVisitedChild = project.history.lastVisitedChild || {};
+      if (!undoTree[undoCurrentId]) createRootNode();
+    } else {
+      createRootNode();
+    }
+
+    state.selectedRow = null;
+    state.selection = null;
+    state.anchor = null;
+
+    // Sync UI
+    syncSidepanelFromState();
+    applyStyles();
+    setZoom(state.zoom);
+    renderPatternList();
+    renderTable();
+    renderHistoryPanel();
+    saveState();
+    saveUndoTree();
+
+    showToast('Project imported.');
+  } catch (err) {
+    showToast('Import failed: ' + err.message);
+  }
 }
 
 // ── XLSX Import ────────────────────────────────────
@@ -2364,6 +2487,7 @@ function saveState() {
     delete s.viewMode;
     localStorage.setItem('daakaa-state', JSON.stringify(s));
   } catch (_) {}
+  saveUndoTree();
 }
 
 function loadState() {
@@ -2418,7 +2542,26 @@ function init() {
   renderPatternList();
   renderTable();
   bindSidepanelControls();
-  createRootNode();
+  // Restore undo tree from localStorage, or create fresh
+  try {
+    const raw = localStorage.getItem('daakaa-undo-tree');
+    if (raw) {
+      const saved = JSON.parse(raw);
+      undoTree = saved.undoTree || {};
+      undoCurrentId = saved.undoCurrentId ?? 0;
+      undoNextId = saved.undoNextId ?? 1;
+      lastVisitedChild = saved.lastVisitedChild || {};
+      // Validate: current node must exist
+      if (!undoTree[undoCurrentId]) {
+        createRootNode();
+      }
+    } else {
+      createRootNode();
+    }
+  } catch (_) {
+    createRootNode();
+  }
+  renderHistoryPanel();
 
   // Combined sidepanel drag+click logic
   let _lastSidepanelWidth = 280;
