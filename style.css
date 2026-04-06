@@ -1123,8 +1123,95 @@ details[open]>.panel-header::before {
 		min-height: 0;
 	}
 
-	/* Prevent iOS auto-zoom on input focus (requires >= 16px) */
-	input, select, textarea {
+	/* ── Mobile typography scale ── */
+	.field-label {
+		font-size: 14px;
+	}
+
+	.fieldset legend {
+		font-size: 13px;
+	}
+
+	.panel-header {
+		font-size: 15px;
+	}
+
+	.bottom-tab {
+		font-size: 14px;
+	}
+
+	.btn {
+		font-size: 14px;
+		height: 34px;
+	}
+
+	.btn-sm {
+		font-size: 13px;
+		height: 28px;
+	}
+
+	.pattern-item {
+		font-size: 14px;
+	}
+
+	.pattern-item-btn {
+		font-size: 13px;
+		width: 28px;
+		height: 28px;
+	}
+
+	.row-details-info {
+		font-size: 13px;
+	}
+
+	.row-detail-toggles button {
+		font-size: 14px;
+		width: 34px;
+		height: 30px;
+	}
+
+	.context-menu {
+		font-size: 14px;
+	}
+
+	.context-menu-input-row {
+		font-size: 14px;
+	}
+
+	.history-panel {
+		font-size: 13px;
+	}
+
+	.history-node-time {
+		font-size: 12px;
+	}
+
+	/* Inputs/selects: 16px iOS anti-zoom + taller for touch */
+	.field input[type="number"],
+	.field input[type="text"],
+	.field select {
 		font-size: 16px !important;
+		height: 34px;
+	}
+
+	.pattern-item select,
+	.pattern-item input {
+		font-size: 16px !important;
+		height: 34px;
+	}
+
+	.pat-editor-row input {
+		font-size: 16px !important;
+		height: 34px;
+	}
+
+	.row-detail-name-input {
+		font-size: 16px !important;
+		height: 34px;
+	}
+
+	.context-menu-input-row input {
+		font-size: 16px !important;
+		height: 34px;
 	}
 }
