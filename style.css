@@ -78,6 +78,14 @@ body {
 	color: #000;
 	background: #fff;
 	-webkit-text-size-adjust: 100%;
+	touch-action: manipulation;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+input, textarea {
+	-webkit-user-select: text;
+	user-select: text;
 }
 
 /* ── Layout ─────────────────────────────────────── */
@@ -1113,5 +1121,10 @@ details[open]>.panel-header::before {
 	.editor {
 		flex: 1;
 		min-height: 0;
+	}
+
+	/* Prevent iOS auto-zoom on input focus (requires >= 16px) */
+	input, select, textarea {
+		font-size: 16px !important;
 	}
 }
