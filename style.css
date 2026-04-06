@@ -614,8 +614,7 @@ details[open]>.panel-header::before {
 }
 
 .spreadsheet .content-cell:hover {
-	background: rgba(0, 0, 0, 0.06);
-	outline: 1px solid #000;
+	outline: 1px solid rgba(0,0,0,0.5);
 	outline-offset: -1px;
 }
 
@@ -653,8 +652,7 @@ details[open]>.panel-header::before {
 }
 
 .spreadsheet.alt-cols td.content-cell:nth-child(even):hover {
-	background: rgba(0, 0, 0, 0.06);
-	outline: 1px solid #000;
+	outline: 1px solid rgba(0,0,0,0.5);
 	outline-offset: -1px;
 }
 

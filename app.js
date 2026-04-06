@@ -2500,15 +2500,11 @@ function init() {
   $fitBtn.className = 'view-mode-btn';
   $fitBtn.style.left = '52px';
   $fitBtn.textContent = '\u229E';
-  $fitBtn.title = 'Fit to screen width';
+  $fitBtn.title = 'Reset zoom (100%)';
   document.getElementById('editor').appendChild($fitBtn);
 
   $fitBtn.addEventListener('click', () => {
-    const editorWidth = document.getElementById('editor').offsetWidth;
-    const tableWidth = $table.scrollWidth / state.zoom;
-    if (tableWidth > 0) {
-      setZoom(Math.min(2, Math.max(0.3, (editorWidth - 32) / tableWidth)));
-    }
+    setZoom(1);
   });
 
   $viewModeBtn.addEventListener('click', () => {
