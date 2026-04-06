@@ -495,7 +495,7 @@ function renderTable() {
   let html = '';
 
   html += '<colgroup>';
-  html += '<col style="width:auto; min-width:80px;">';
+  html += '<col style="width:auto; min-width:calc(80px * var(--zoom));">';
   for (let c = 0; c < cols; c++) {
     html += '<col style="width:auto; min-width:var(--cell-min-w);">';
   }

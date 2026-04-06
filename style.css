@@ -510,8 +510,8 @@ details[open]>.panel-header::before {
 	padding: 0 10px;
 	font-weight: 400;
 	user-select: none;
-	min-width: 80px;
-	max-width: 200px;
+	min-width: calc(80px * var(--zoom));
+	max-width: calc(200px * var(--zoom));
 	width: auto;
 	border-right: calc(2px * var(--zoom)) solid var(--border-strong);
 }
@@ -527,7 +527,7 @@ details[open]>.panel-header::before {
 	vertical-align: middle;
 	font-weight: 600;
 	padding: 0 10px;
-	min-width: 80px;
+	min-width: calc(80px * var(--zoom));
 	border-bottom: 1px solid var(--border);
 	border-right: calc(2px * var(--zoom)) solid var(--border-strong);
 }
