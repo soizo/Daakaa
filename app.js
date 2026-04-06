@@ -313,24 +313,32 @@ const $rowDetailsBody = document.getElementById('row-details-body');
 // ── Bottom Mode (responsive) ──────────────────────
 let isBottomMode = false;
 const mql = window.matchMedia('(max-width: 768px)');
+let _savedPanelStates = {}; // { tabId: boolean }
 
 function updateLayoutMode() {
+  const wasBottom = isBottomMode;
   isBottomMode = mql.matches;
-  if (isBottomMode) {
-    // Force all panels open so content is visible when tabs switch
+
+  if (isBottomMode && !wasBottom) {
+    // Entering bottom mode — save current open states, then force all open
     document.querySelectorAll('.sidepanel-content .panel').forEach(p => {
+      _savedPanelStates[p.dataset.tabId] = p.open;
       p.open = true;
     });
-    // Set initial active tab from first open <details>
-    const panels = document.querySelectorAll('.sidepanel-content .panel');
-    let found = false;
-    panels.forEach(p => {
-      if (p.open && !found) {
-        found = true;
-        setActiveTab(p.dataset.tabId);
+    // Set active tab from first previously-open panel
+    let activeTab = null;
+    for (const [tabId, wasOpen] of Object.entries(_savedPanelStates)) {
+      if (wasOpen && !activeTab) activeTab = tabId;
+    }
+    setActiveTab(activeTab || 'sheet');
+  } else if (!isBottomMode && wasBottom) {
+    // Leaving bottom mode — restore saved open states
+    document.querySelectorAll('.sidepanel-content .panel').forEach(p => {
+      if (_savedPanelStates.hasOwnProperty(p.dataset.tabId)) {
+        p.open = _savedPanelStates[p.dataset.tabId];
       }
+      p.classList.remove('active-tab');
     });
-    if (!found) setActiveTab('sheet');
   }
 }
 
