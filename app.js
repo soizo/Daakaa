@@ -2053,6 +2053,17 @@ function tableHasContent() {
   return false;
 }
 
+// ── Gzip compression helpers ───────────────────────
+async function compressToGzip(text) {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Response(stream).blob();
+}
+
+async function decompressGzip(blob) {
+  const stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).text();
+}
+
 // ── Project Export (.daakaa) ───────────────────────
 async function handleProjectExport() {
   const includeHistory = await showConfirm('Include undo history in export?', 'Yes', 'No');
@@ -2081,12 +2092,12 @@ async function handleProjectExport() {
     };
   }
 
-  const json = JSON.stringify(project, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
+  const json = JSON.stringify(project);
+  const blob = await compressToGzip(json);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'daakaa-project.daakaa.json';
+  a.download = 'daakaa-project.daakaa.gz';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2102,7 +2113,13 @@ async function handleProjectImport() {
     if (!ok) return;
   }
 
-  const text = await file.text();
+  // Support both .gz (compressed) and .json (legacy/uncompressed)
+  let text;
+  if (file.name.endsWith('.gz')) {
+    text = await decompressGzip(file);
+  } else {
+    text = await file.text();
+  }
   try {
     const project = JSON.parse(text);
 
