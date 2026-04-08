@@ -53,6 +53,7 @@ const state = {
   colorTarget: 'header',
   zoom: 1,
   altCols: true,
+  altRows: false,
   selectedRow: null,
   selection: null,
   anchor: null,
@@ -62,6 +63,88 @@ const state = {
 const CYCLE = ['✓', '×', '〇', '—', ''];
 
 let hoveredCell = null;
+
+// ── Input model detection (§2–3 of spec) ──────────
+// Resolved once at boot. See decoupled-input-and-layout.md.
+function detectTouchDevice() {
+  // 1. URL param override — persists to localStorage.
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const urlMode = params.get('input');
+    if (urlMode === 'touch' || urlMode === 'mouse') {
+      localStorage.setItem('daakaa_input_mode', urlMode);
+    } else if (urlMode === 'auto') {
+      localStorage.removeItem('daakaa_input_mode');
+    }
+  } catch (_) {}
+
+  // 2. localStorage manual override.
+  try {
+    const stored = localStorage.getItem('daakaa_input_mode');
+    if (stored === 'touch') return true;
+    if (stored === 'mouse') return false;
+  } catch (_) {}
+
+  // 3. UA Client Hints.
+  if (navigator.userAgentData && navigator.userAgentData.mobile === true) return true;
+
+  const ua = navigator.userAgent || '';
+  const platform = navigator.platform || '';
+  const maxTouch = navigator.maxTouchPoints || 0;
+
+  // 4. iPadOS masquerade (reports as Mac since iPadOS 13).
+  if ((platform === 'MacIntel' || /Macintosh/.test(ua)) && maxTouch > 1) return true;
+
+  // 5. Mobile/tablet UA string.
+  if (/iPhone|iPad|iPod|Android|Mobile|Tablet|Silk|KFAPWI/i.test(ua)) return true;
+
+  // 6. Touch capability fallback, but exclude desktop OSes to avoid
+  //    classifying touch-screen laptops as touch.
+  if (('ontouchstart' in window) && maxTouch > 0 && !/Windows NT|Macintosh|Linux x86/.test(ua)) {
+    return true;
+  }
+
+  // 7. Default: mouse.
+  return false;
+}
+
+const isTouchDevice = detectTouchDevice();
+
+// Attach body classes once at boot; never removed.
+document.body.classList.add(isTouchDevice ? 'input-touch' : 'input-mouse');
+
+// ── Read-only helper (§7 of spec) ─────────────────
+// Centralised guard for every content-editing entry point.
+// View mode locks grid-data editing only — Style / Header Patterns
+// / sidepanel config remain editable.
+function isReadOnly() {
+  return state.viewMode === true;
+}
+
+// Lock/unlock the Row Details panel's editable fields and the handful
+// of toolbar buttons that mutate grid data. Style, Header Patterns, and
+// other appearance/configuration controls remain editable per spec §7.
+function applyViewModeLock() {
+  const locked = isReadOnly();
+
+  // Row Details form fields
+  const rd = document.getElementById('row-details-body');
+  if (rd) {
+    rd.querySelectorAll('input, select, textarea, button').forEach((el) => {
+      el.disabled = locked;
+    });
+  }
+
+  // Grid-data toolbar buttons: add row and column count.
+  // Header Patterns editor (incl. add-pattern) remains editable per
+  // the resolved §9.1 decision — it is an appearance/configuration
+  // control, not grid data.
+  const toolbarIds = ['add-row-item', 'col-count'];
+  toolbarIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = locked;
+  });
+}
 
 // ── Undo Tree ─────────────────────────────────────
 let undoTree = {};
@@ -302,6 +385,7 @@ const $patternList = document.getElementById('pattern-list');
 const $addPattern = document.getElementById('add-pattern');
 const $addRowItem = document.getElementById('add-row-item');
 const $altColsToggle = document.getElementById('alt-cols-toggle');
+const $altRowsToggle = document.getElementById('alt-rows-toggle');
 const $btnImport = document.getElementById('btn-import');
 const $btnExport = document.getElementById('btn-export');
 const $fileInput = document.getElementById('xlsx-file-input');
@@ -320,10 +404,11 @@ function updateLayoutMode() {
   isBottomMode = mql.matches;
 
   if (isBottomMode && !wasBottom) {
-    // Entering bottom mode — save desktop width, clear inline width/height
-    if (!$sidepanel.classList.contains('collapsed')) {
-      _lastSidepanelWidth = $sidepanel.offsetWidth || _lastSidepanelWidth;
-    }
+    // Entering bottom mode — preserve desktop width, clear inline width/height.
+    // NOTE: Do NOT read offsetWidth here. By the time this runs, the
+    // (max-width:768px) media query already forces width:100% !important, so
+    // offsetWidth would return the viewport width and corrupt the saved
+    // desktop width. _lastSidepanelWidth is maintained by the resize handler.
     $sidepanel.style.width = '';
     $sidepanel.style.minWidth = '';
     $sidepanel.style.height = _lastBottomPanelHeight + 'px';
@@ -677,11 +762,13 @@ function bindTableEvents() {
       state.selection = null;
       updateSelectionVisual();
 
-      if (!state.viewMode) {
+      if (!isReadOnly()) {
         const cur = getCellValue(r, c);
 
-        // Arrow-prefixed value (←N✓): inline edit the number instead of cycling
-        const arrowMatch = /^←(\d+)✓$/.exec(cur);
+        // Arrow-prefixed value (←N✓): on mouse, inline edit the number instead
+        // of cycling. On touch, inline edit is disabled — cycle through instead
+        // (edits happen via Row Details / context menu long-press).
+        const arrowMatch = !isTouchDevice && /^←(\d+)✓$/.exec(cur);
         if (arrowMatch) {
           // Prevent duplicate editors
           if (td.querySelector('input')) return;
@@ -743,6 +830,7 @@ function bindTableEvents() {
 
     td.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (isReadOnly()) return;
       const r = +td.dataset.row;
       const c = +td.dataset.col;
 
@@ -767,12 +855,17 @@ function bindTableEvents() {
       state.anchor = null;
       updateSelectionVisual();
     });
-    th.addEventListener('dblclick', () => startHeaderCellEdit(th));
+    th.addEventListener('dblclick', () => {
+      if (isReadOnly()) return;
+      if (isTouchDevice) return;
+      startHeaderCellEdit(th);
+    });
   });
 
   const addRowCell = $table.querySelector('.add-row-cell');
   if (addRowCell) {
     addRowCell.addEventListener('click', () => {
+      if (isReadOnly()) return;
       commitUndoNode('Add row');
       state.rows.push({ name: `Item ${state.rows.length + 1}`, bold: false, underline: false });
       renderTable();
@@ -801,7 +894,14 @@ function bindStickyLeftInteractions() {
     leftCell.addEventListener('mousedown', (e) => {
       if (isModalOpen()) return;
       if (e.button !== 0) return;
+      if (isTouchDevice) return; // touch devices use the touchstart path below
       if (leftCell.classList.contains('cell-editing')) return;
+      if (isReadOnly()) {
+        // In view mode: allow normal row selection via click, no drag.
+        state.anchor = { r: rowIdx, c: 0 };
+        selectRow(rowIdx);
+        return;
+      }
 
       mouseDownPos = { x: e.clientX, y: e.clientY };
       isDragging = false;
@@ -844,11 +944,14 @@ function bindStickyLeftInteractions() {
 
     leftCell.addEventListener('dblclick', (e) => {
       e.preventDefault();
+      if (isReadOnly()) return;
+      if (isTouchDevice) return;
       startStickyLeftEdit(leftCell, rowIdx);
     });
 
     leftCell.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (isReadOnly()) return;
       if (state.selection) {
         const { r1, r2, c1, c2 } = state.selection;
         const isFullWidth = c1 === 0 && c2 === state.cols - 1;
@@ -861,29 +964,107 @@ function bindStickyLeftInteractions() {
       showRowContextMenu(e.clientX, e.clientY, rowIdx);
     });
 
-    // Touch: long-press for context menu
-    let touchTimer = null;
-    let touchMode = null;
+    // ── Touch path (sticky-left) ────────────────────
+    // State machine per spec §6.2:
+    //   t < 250 ms + movement  → scroll wins, cancel everything
+    //   t >= 250 ms, still still → drag armed
+    //     then movement > 6 px  → start row drag
+    //     then release < 600 ms → context menu
+    //   release before 250 ms, no movement → tap = select row
+    let touchArmTimer = null;
+    let touchCtxTimer = null;
+    let touchStartXY = null;
+    let touchArmed = false;     // drag armed after 250ms
+    let touchDragging = false;  // drag actively started
+    let touchContextShown = false;
+    const TOUCH_ARM_MS = 250;
+    const TOUCH_CTX_MS = 600;
+    const TOUCH_MOVE_PX = 6;
+
+    const clearTouchTimers = () => {
+      if (touchArmTimer) { clearTimeout(touchArmTimer); touchArmTimer = null; }
+      if (touchCtxTimer) { clearTimeout(touchCtxTimer); touchCtxTimer = null; }
+    };
 
     leftCell.addEventListener('touchstart', (e) => {
+      if (!isTouchDevice) return;
       if (e.touches.length !== 1) return;
+      if (isModalOpen()) return;
       const touch = e.touches[0];
-      touchMode = null;
-      touchTimer = setTimeout(() => {
-        touchTimer = null;
-        touchMode = 'context';
-        showRowContextMenu(touch.clientX, touch.clientY, rowIdx);
-      }, 500);
+      touchStartXY = { x: touch.clientX, y: touch.clientY };
+      touchArmed = false;
+      touchDragging = false;
+      touchContextShown = false;
+
+      if (!isReadOnly()) {
+        touchArmTimer = setTimeout(() => {
+          touchArmTimer = null;
+          touchArmed = true;
+        }, TOUCH_ARM_MS);
+
+        touchCtxTimer = setTimeout(() => {
+          touchCtxTimer = null;
+          if (touchDragging) return;
+          touchContextShown = true;
+          showRowContextMenu(touch.clientX, touch.clientY, rowIdx);
+        }, TOUCH_CTX_MS);
+      }
     }, { passive: true });
 
-    leftCell.addEventListener('touchmove', () => {
-      if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
-    }, { passive: true });
+    leftCell.addEventListener('touchmove', (e) => {
+      if (!isTouchDevice) return;
+      if (!touchStartXY) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartXY.x;
+      const dy = touch.clientY - touchStartXY.y;
+      const moved = Math.abs(dx) + Math.abs(dy);
+
+      if (!touchArmed) {
+        // Movement before arm → scroll wins, cancel all timers
+        if (moved > TOUCH_MOVE_PX) {
+          clearTouchTimers();
+          touchStartXY = null;
+        }
+        return;
+      }
+
+      if (touchArmed && !touchDragging && moved > TOUCH_MOVE_PX) {
+        // Start drag. Cancel context-menu timer.
+        if (touchCtxTimer) { clearTimeout(touchCtxTimer); touchCtxTimer = null; }
+        touchDragging = true;
+        const tr = leftCell.closest('tr');
+        startRowDrag(tr, rowIdx, touch.clientY);
+      }
+
+      if (touchDragging) {
+        handleRowDragMove({ clientX: touch.clientX, clientY: touch.clientY });
+        // Prevent native scroll while dragging a row.
+        if (e.cancelable) e.preventDefault();
+      }
+    }, { passive: false });
 
     leftCell.addEventListener('touchend', () => {
-      if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
-      if (!touchMode) selectRow(rowIdx);
-      touchMode = null;
+      if (!isTouchDevice) return;
+      clearTouchTimers();
+      if (touchDragging) {
+        finishRowDrag();
+      } else if (!touchContextShown && touchStartXY) {
+        // Simple tap → select row (if arm never fired and no movement)
+        selectRow(rowIdx);
+      }
+      touchStartXY = null;
+      touchArmed = false;
+      touchDragging = false;
+      touchContextShown = false;
+    }, { passive: true });
+
+    leftCell.addEventListener('touchcancel', () => {
+      clearTouchTimers();
+      if (touchDragging) finishRowDrag();
+      touchStartXY = null;
+      touchArmed = false;
+      touchDragging = false;
+      touchContextShown = false;
     }, { passive: true });
   });
 }
@@ -905,7 +1086,10 @@ function selectRow(idx) {
 function updateRowDetailsPanel() {
   const idx = state.selectedRow;
   if (idx === null || idx === undefined || !state.rows[idx]) {
-    $rowDetailsBody.innerHTML = '<p class="row-details-info">Double-click a row label to edit. Drag to reorder. Right-click for more options.</p>';
+    const hint = isTouchDevice
+      ? 'Tap a row label to select it. Press and hold to reorder. Long-press for more options.'
+      : 'Double-click a row label to edit. Drag to reorder. Right-click for more options.';
+    $rowDetailsBody.innerHTML = `<p class="row-details-info">${hint}</p>`;
     return;
   }
   const row = state.rows[idx];
@@ -972,6 +1156,9 @@ function updateRowDetailsPanel() {
     commitUndoNode('Delete row');
     deleteRow(idx);
   });
+
+  // Re-apply view-mode lock since we just rebuilt the panel's inputs.
+  applyViewModeLock();
 }
 
 // ── Inline Editing: Sticky-left cells ──────────────
@@ -1402,9 +1589,12 @@ function deleteRow(idx) {
   saveState();
 }
 
-// Long-press for content cells (touch)
+// Long-press for content cells (touch only; opens context menu, never inline edit).
+// Disabled on non-touch devices and in view mode per spec §5 / §7.
 let longPressTimer = null;
 document.addEventListener('touchstart', (e) => {
+  if (!isTouchDevice) return;
+  if (isReadOnly()) return;
   const td = e.target.closest('.content-cell');
   if (!td) return;
   const touch = e.touches[0];
@@ -1450,7 +1640,7 @@ function renderPatternList() {
       div.innerHTML = `
         <select data-index="${i}" class="pat-select">${options}</select>
         <button class="btn btn-sm pat-edit-values" data-index="${i}">Edit values (${valCount})</button>
-        <button class="pattern-item-btn pat-reset" data-index="${i}" title="Force-reinitialise this header row">⟳</button>
+        <button class="pattern-item-btn pat-reset" data-index="${i}" title="Force-reinitialise this header row">↻</button>
         <button class="pattern-item-btn pat-del" data-index="${i}" title="Remove">✕</button>
       `;
     } else if (hp.pattern === '映射') {
@@ -1465,7 +1655,7 @@ function renderPatternList() {
         <select data-index="${i}" class="pat-select">${options}</select>
         <select data-index="${i}" class="pat-source" style="width:70px;flex:0 0 70px;">${sourceOptions}</select>
         <button class="btn btn-sm pat-edit-map" data-index="${i}">Edit map (${mapCount})</button>
-        <button class="pattern-item-btn pat-reset" data-index="${i}" title="Force-reinitialise this header row">⟳</button>
+        <button class="pattern-item-btn pat-reset" data-index="${i}" title="Force-reinitialise this header row">↻</button>
         <button class="pattern-item-btn pat-del" data-index="${i}" title="Remove">✕</button>
       `;
     } else {
@@ -1474,7 +1664,7 @@ function renderPatternList() {
         <select data-index="${i}" class="pat-select">${options}</select>
         <input type="number" class="pat-start" data-index="${i}" value="${hp.start}" title="Start" style="width:40px;">
         <input type="text" class="pat-step" data-index="${i}" value="${stepDisplay}" title="Step" style="width:44px;">
-        <button class="pattern-item-btn pat-reset" data-index="${i}" title="Force-reinitialise this header row">⟳</button>
+        <button class="pattern-item-btn pat-reset" data-index="${i}" title="Force-reinitialise this header row">↻</button>
         <button class="pattern-item-btn pat-del" data-index="${i}" title="Remove">✕</button>
       `;
     }
@@ -1834,54 +2024,31 @@ document.addEventListener('keydown', (e) => {
     updateSelectionVisual();
   }
 
-  // Delete / Backspace
+  // Delete / Backspace — clear selected cells only (never delete rows via keyboard)
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (isReadOnly()) return;
     e.preventDefault();
 
     if (state.selection) {
       const { r1, c1, r2, c2 } = state.selection;
-      const isFullWidth = c1 === 0 && c2 === state.cols - 1;
-
-      if (isFullWidth && r2 >= r1) {
-        commitUndoNode('Delete rows');
-        for (let r = r2; r >= r1; r--) {
-          state.rows.splice(r, 1);
-          const newCells = {};
-          Object.keys(state.cells).forEach(key => {
-            const k = +key;
-            if (k < r) newCells[k] = state.cells[k];
-            else if (k > r) newCells[k - 1] = state.cells[k];
-          });
-          state.cells = newCells;
+      commitUndoNode('Clear cells');
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          setCellValue(r, c, '');
         }
-        state.selection = null;
-        state.anchor = null;
-        state.selectedRow = null;
-        renderTable();
-        saveState();
-      } else {
-        commitUndoNode('Clear cells');
-        for (let r = r1; r <= r2; r++) {
-          for (let c = c1; c <= c2; c++) {
-            setCellValue(r, c, '');
-          }
-        }
-        renderTable();
-        saveState();
       }
-    } else if (state.selectedRow !== null) {
-      commitUndoNode('Delete row');
-      deleteRow(state.selectedRow);
+      renderTable();
+      saveState();
     }
     return;
   }
 
   // Ctrl/Cmd shortcuts (undo, redo, zoom)
   if (e.ctrlKey || e.metaKey) {
-    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-    else if (e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
-    else if (e.key === 'y') { e.preventDefault(); redo(); }
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); if (!isReadOnly()) undo(); }
+    else if (e.key === 'z' && e.shiftKey) { e.preventDefault(); if (!isReadOnly()) redo(); }
+    else if (e.key === 'y') { e.preventDefault(); if (!isReadOnly()) redo(); }
     else if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(state.zoom + 0.1); }
     else if (e.key === '-') { e.preventDefault(); setZoom(state.zoom - 0.1); }
     else if (e.key === '0') { e.preventDefault(); setZoom(1); }
@@ -2047,6 +2214,12 @@ function bindSidepanelControls() {
     saveState();
   });
 
+  $altRowsToggle.addEventListener('change', () => {
+    state.altRows = $altRowsToggle.checked;
+    $table.classList.toggle('alt-rows', state.altRows);
+    saveState();
+  });
+
   $btnImport.addEventListener('click', () => $fileInput.click());
   $fileInput.addEventListener('change', handleImport);
   $btnExport.addEventListener('click', handleExport);
@@ -2149,6 +2322,7 @@ async function handleProjectExport() {
     color: state.color,
     colorTarget: state.colorTarget,
     altCols: state.altCols,
+    altRows: state.altRows,
     zoom: state.zoom,
   };
 
@@ -2204,6 +2378,7 @@ async function handleProjectImport() {
     if (project.color) state.color = project.color;
     if (project.colorTarget) state.colorTarget = project.colorTarget;
     if (typeof project.altCols === 'boolean') state.altCols = project.altCols;
+    if (typeof project.altRows === 'boolean') state.altRows = project.altRows; else state.altRows = false;
     if (typeof project.zoom === 'number') state.zoom = project.zoom;
 
     // Restore history if present
@@ -2590,6 +2765,7 @@ function loadState() {
     if (s.colorTarget) state.colorTarget = s.colorTarget;
     if (typeof s.zoom === 'number') state.zoom = s.zoom;
     if (typeof s.altCols === 'boolean') state.altCols = s.altCols;
+    if (typeof s.altRows === 'boolean') state.altRows = s.altRows;
     if (s.headerOverrides) state.headerOverrides = s.headerOverrides;
     if (s.pattern && !s.headerPatterns) {
       state.headerPatterns = [{ pattern: s.pattern, start: s.patternStart || 0, step: s.patternStep || 1 }];
@@ -2604,6 +2780,8 @@ function syncSidepanelFromState() {
   $colorTarget.value = state.colorTarget;
   $altColsToggle.checked = state.altCols;
   $table.classList.toggle('alt-cols', state.altCols);
+  if ($altRowsToggle) $altRowsToggle.checked = state.altRows;
+  $table.classList.toggle('alt-rows', state.altRows);
 }
 
 // Deselect on clicking editor background
@@ -2674,6 +2852,7 @@ function init() {
         $sidepanel.classList.remove('collapsed');
         $sidepanel.style.width = newW + 'px';
         $sidepanel.style.minWidth = newW + 'px';
+        _lastSidepanelWidth = newW;
         $sidepanelToggle.textContent = '⋮';
         $sidepanelToggle.style.cursor = 'col-resize';
       }
@@ -2741,6 +2920,7 @@ function init() {
     $viewModeBtn.textContent = state.viewMode ? '\u25A3' : '\u25A2'; // ▣ locked / ▢ open
     $viewModeBtn.classList.toggle('active', state.viewMode);
     $wrapper.classList.toggle('view-mode', state.viewMode);
+    applyViewModeLock();
   });
 
   $wrapper.addEventListener('mousedown', (e) => {

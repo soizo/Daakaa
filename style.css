@@ -45,6 +45,21 @@
 	--cell-min-w: 48px;
 	--zoom: 1;
 	--table-margin: 16px;
+
+	/* Touch UI system — see docs/design/touch-ui-system.md §2 */
+	--touch-input-h:       44px;
+	--touch-btn-sm-h:      36px;
+	--touch-tab-h:         40px;
+	--touch-handle-h:      20px;
+	--touch-px:            14px;
+	--touch-field-gap:     12px;
+	--touch-checkbox-size: 20px;
+	--touch-font-base:     15px;
+	--touch-font-input:    16px;
+	--touch-font-label:    13px;
+	--touch-font-sm:       13px;
+	--touch-font-btn:      15px;
+	--touch-font-header:   15px;
 }
 
 @font-face {
@@ -145,6 +160,7 @@ input, textarea {
 .sidepanel-content {
 	flex: 1;
 	min-width: 0;
+	min-height: 0;
 	overflow-y: auto;
 	padding: 20px;
 	padding-left: 0;
@@ -621,7 +637,7 @@ details[open]>.panel-header::before {
 	background: rgba(0, 0, 0, 0.12);
 }
 
-.spreadsheet .content-cell:hover {
+body.input-mouse .spreadsheet .content-cell:hover {
 	outline: 1px solid rgba(0,0,0,0.5);
 	outline-offset: -1px;
 }
@@ -659,7 +675,23 @@ details[open]>.panel-header::before {
 	background: var(--t2);
 }
 
-.spreadsheet.alt-cols td.content-cell:nth-child(even):hover {
+body.input-mouse .spreadsheet.alt-cols td.content-cell:nth-child(even):hover {
+	outline: 1px solid rgba(0,0,0,0.5);
+	outline-offset: -1px;
+}
+
+/* ── Alternating row backgrounds ─────────────────
+ * Mirror of alt-cols: stripes every even row (1-based visual)
+ * at the same --t2 tier. Intersection with alt-cols stays at t2
+ * (no doubled darkening) because both use the same tier.
+ */
+.spreadsheet.alt-rows tbody tr:nth-child(even) td.content-cell {
+	background: var(--t2);
+}
+.spreadsheet.alt-rows.alt-cols tbody tr:nth-child(even) td.content-cell:nth-child(even) {
+	background: var(--t2);
+}
+body.input-mouse .spreadsheet.alt-rows tbody tr:nth-child(even) td.content-cell:hover {
 	outline: 1px solid rgba(0,0,0,0.5);
 	outline-offset: -1px;
 }
@@ -965,12 +997,12 @@ details[open]>.panel-header::before {
 	cursor: grab;
 }
 
-.view-mode .spreadsheet .content-cell:hover {
+body.input-mouse .view-mode .spreadsheet .content-cell:hover {
 	background: transparent;
 	outline: none;
 }
 
-.view-mode .spreadsheet.alt-cols td.content-cell:nth-child(even):hover {
+body.input-mouse .view-mode .spreadsheet.alt-cols td.content-cell:nth-child(even):hover {
 	background: var(--t2);
 	outline: none;
 }
@@ -983,7 +1015,7 @@ details[open]>.panel-header::before {
 	cursor: default;
 }
 
-.spreadsheet .add-row-cell:hover {
+body.input-mouse .spreadsheet .add-row-cell:hover {
 	background: var(--t2);
 	cursor: pointer;
 }
@@ -1086,6 +1118,9 @@ details[open]>.panel-header::before {
 	/* Sidepanel content in bottom mode */
 	.sidepanel-content {
 		padding: 0;
+		/* In column-flex bottom mode, force scroll container height to 0
+		   so flex:1 + overflow-y:auto activates scrolling on WebKit. */
+		height: 0;
 	}
 
 	.sidepanel.collapsed .sidepanel-content {
@@ -1122,96 +1157,240 @@ details[open]>.panel-header::before {
 		flex: 1;
 		min-height: 0;
 	}
+}
 
-	/* ── Mobile typography scale ── */
-	.field-label {
-		font-size: 14px;
-	}
+/* ── Touch UI System (body.input-touch) ─────────────
+ * All touch-specific sizing and typography rules.
+ * Layout (panel position) is handled by @media (max-width: 768px) above.
+ * See docs/design/touch-ui-system.md for the spec.
+ */
 
-	.fieldset legend {
-		font-size: 13px;
-	}
+/* §1 — Typography (1.125 modular scale, base 15px) */
+body.input-touch .panel-header {
+	font-size: var(--touch-font-header);
+}
 
-	.panel-header {
-		font-size: 15px;
-	}
+body.input-touch .sidepanel-title {
+	font-size: 19px;
+	font-weight: 700;
+	line-height: 1.2;
+}
 
-	.bottom-tab {
-		font-size: 14px;
-	}
+body.input-touch .field-label {
+	font-size: var(--touch-font-label);
+	line-height: 1.4;
+}
 
-	.btn {
-		font-size: 14px;
-		height: 34px;
-	}
+body.input-touch .fieldset legend {
+	font-size: var(--touch-font-label);
+	font-weight: 600;
+	line-height: 1.3;
+}
 
-	.btn-sm {
-		font-size: 13px;
-		height: 28px;
-	}
+/* §2 — Standard input/select/button sizing (44px) */
+body.input-touch .field {
+	min-height: var(--touch-input-h);
+	margin-bottom: var(--touch-field-gap);
+}
 
-	.pattern-item {
-		font-size: 14px;
-	}
+body.input-touch .field:last-child {
+	margin-bottom: 0;
+}
 
-	.pattern-item-btn {
-		font-size: 13px;
-		width: 28px;
-		height: 28px;
-	}
+body.input-touch .field input[type="text"],
+body.input-touch .field input[type="number"],
+body.input-touch .field select {
+	height: var(--touch-input-h);
+	padding: 0 var(--touch-px);
+	font-size: var(--touch-font-input);
+}
 
-	.row-details-info {
-		font-size: 13px;
-	}
+body.input-touch .field input[type="color"] {
+	flex: 0 0 var(--touch-input-h);
+	height: var(--touch-input-h);
+	padding: 4px;
+}
 
-	.row-detail-toggles button {
-		font-size: 14px;
-		width: 34px;
-		height: 30px;
-	}
+body.input-touch .field input[type="checkbox"] {
+	width: var(--touch-checkbox-size);
+	height: var(--touch-checkbox-size);
+	accent-color: #000;
+}
 
-	.context-menu {
-		font-size: 14px;
-	}
+body.input-touch .btn {
+	height: var(--touch-input-h);
+	padding: 0 var(--touch-px);
+	font-size: var(--touch-font-btn);
+}
 
-	.context-menu-input-row {
-		font-size: 14px;
-	}
+body.input-touch .btn-sm {
+	height: var(--touch-btn-sm-h);
+	padding: 0 10px;
+	font-size: var(--touch-font-sm);
+}
 
-	.history-panel {
-		font-size: 13px;
-	}
+body.input-touch .btn-row {
+	gap: 8px;
+}
 
-	.history-node-time {
-		font-size: 12px;
-	}
+/* §3 — Bottom panel drag handle (touch only) */
+body.input-touch .bottom-panel-handle {
+	height: var(--touch-handle-h);
+}
 
-	/* Inputs/selects: 16px iOS anti-zoom + taller for touch */
-	.field input[type="number"],
-	.field input[type="text"],
-	.field select {
-		font-size: 16px !important;
-		height: 34px;
-	}
+body.input-touch .bottom-panel-handle::after {
+	top: 8px;
+	width: 40px;
+	height: 4px;
+	background: rgba(0, 0, 0, 0.35);
+}
 
-	.pattern-item select,
-	.pattern-item input {
-		font-size: 16px !important;
-		height: 34px;
-	}
+body.input-touch .bottom-panel-tabs {
+	height: var(--touch-tab-h);
+}
 
-	.pat-editor-row input {
-		font-size: 16px !important;
-		height: 34px;
-	}
+body.input-touch .bottom-tab {
+	font-size: var(--touch-font-label);
+	padding: 0 4px;
+}
 
-	.row-detail-name-input {
-		font-size: 16px !important;
-		height: 34px;
-	}
+body.input-touch .bottom-tab.active {
+	font-weight: 600;
+}
 
-	.context-menu-input-row input {
-		font-size: 16px !important;
-		height: 34px;
-	}
+/* §3 — Sidepanel toggle strip (right-panel mode) */
+body.input-touch .sidepanel-tab {
+	width: 32px;
+	min-width: 32px;
+	font-size: 14px;
+}
+
+body.input-touch .sidepanel.collapsed {
+	width: 32px;
+	min-width: 32px;
+}
+
+/* §4.3 — Header Patterns panel */
+body.input-touch .pattern-item {
+	font-size: var(--touch-font-label);
+}
+
+body.input-touch .pattern-item select,
+body.input-touch .pattern-item input {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-input);
+	padding: 0 8px;
+}
+
+body.input-touch .pattern-item input[type="number"] {
+	width: 64px;
+	flex: 0 0 64px;
+}
+
+body.input-touch .pattern-item-btn {
+	width: var(--touch-btn-sm-h);
+	height: var(--touch-btn-sm-h);
+	font-size: var(--touch-font-label);
+}
+
+body.input-touch .pat-custom-editor,
+body.input-touch .pat-mapping-editor {
+	max-height: 200px;
+}
+
+body.input-touch .pat-editor-row {
+	gap: 8px;
+}
+
+body.input-touch .pat-editor-row input {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-input);
+	padding: 0 8px;
+}
+
+body.input-touch .pat-editor-header {
+	font-size: var(--touch-font-label);
+}
+
+/* §4.4 — Row Details panel */
+body.input-touch .row-details-info {
+	font-size: var(--touch-font-label);
+	line-height: 1.5;
+}
+
+body.input-touch .row-detail-name-input {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-input);
+	padding: 0 8px;
+}
+
+body.input-touch .row-detail-toggles button {
+	width: var(--touch-input-h);
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-btn);
+}
+
+/* §4.5 — History panel */
+body.input-touch .history-panel {
+	font-size: var(--touch-font-label);
+	max-height: none;
+}
+
+body.input-touch .history-node {
+	font-size: var(--touch-font-label);
+	padding: 8px 6px;
+}
+
+body.input-touch .history-node-time {
+	font-size: 11px;
+}
+
+body.input-touch .history-branch-toggle {
+	font-size: 11px;
+	padding: 6px 8px;
+}
+
+/* §7 — Context menu */
+body.input-touch .context-menu {
+	font-size: var(--touch-font-base);
+	min-width: 200px;
+}
+
+body.input-touch .context-menu-item {
+	padding: 10px 16px;
+}
+
+body.input-touch .context-menu-input-row {
+	font-size: var(--touch-font-base);
+}
+
+body.input-touch .context-menu-input-row input {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-input);
+	width: 60px;
+}
+
+body.input-touch .context-menu-input-row button {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-sm);
+}
+
+/* §6 — Touch active/pressed states (replace hover) */
+body.input-touch .btn:active,
+body.input-touch .btn-sm:active,
+body.input-touch .pattern-item-btn:active,
+body.input-touch .bottom-tab:active,
+body.input-touch .panel-header:active,
+body.input-touch .history-node:active,
+body.input-touch .context-menu-item:active,
+body.input-touch .row-detail-toggles button:active,
+body.input-touch .sidepanel-tab:active {
+	background: var(--t4);
+	color: var(--accent-text);
+}
+
+/* §6 — Focus ring for external keyboards on iPad */
+body.input-touch :focus-visible {
+	outline: 2px solid #000;
+	outline-offset: 1px;
 }
