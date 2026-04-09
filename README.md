@@ -4,7 +4,7 @@ An Excel-style check-in tracker that runs entirely in the browser — no server,
 
 **Live site:** https://soizo.github.io/Daakaa/
 
-![Screenshot](screenshot.png)
+![Screenshot](docs/ScreenShot-Apr9.png)
 
 ---
 
@@ -28,28 +28,28 @@ The application is a single HTML file and a vanilla JS/CSS pair — no transpila
 
 ### Cell values
 
-| Value | Meaning |
-|---|---|
-| `✓` | Check / done |
-| `×` | Cross / absent |
-| `〇` | Circle |
-| `—` | Dash / N/A |
-| `←N✓` | Arrow-count (e.g. `←3✓`) |
-| *(empty)* | No entry |
+| Value     | Meaning                  |
+| --------- | ------------------------ |
+| `✓`       | Check / done             |
+| `×`       | Cross / absent           |
+| `〇`      | Circle                   |
+| `—`       | Dash / N/A               |
+| `←N✓`     | Arrow-count (e.g. `←3✓`) |
+| _(empty)_ | No entry                 |
 
 ### Header patterns
 
 Multiple header rows can be stacked. Each row uses one of the built-in patterns or a custom value list:
 
-| Pattern | Content |
-|---|---|
-| 曜日 | Day-of-week circles (㊐–㊏), cyclic |
-| 数字 | Integers with configurable start and step |
-| 農曆日 | Lunar calendar days (初一–三十), cyclic |
-| 農曆月 | Lunar months (正月–臘月), cyclic |
-| 英文月 | English month abbreviations (Jan–Dec), cyclic |
-| Custom | Arbitrary comma-separated values |
-| Mapping | Per-column value overrides |
+| Pattern | Content                                       |
+| ------- | --------------------------------------------- |
+| 曜日    | Day-of-week circles (㊐–㊏), cyclic           |
+| 数字    | Integers with configurable start and step     |
+| 農曆日  | Lunar calendar days (初一–三十), cyclic       |
+| 農曆月  | Lunar months (正月–臘月), cyclic              |
+| 英文月  | English month abbreviations (Jan–Dec), cyclic |
+| Custom  | Arbitrary comma-separated values              |
+| Mapping | Per-column value overrides                    |
 
 Individual header cells can be overridden directly.
 
@@ -116,21 +116,21 @@ The application loads SheetJS and ExcelJS from jsDelivr CDN. An internet connect
 
 ## Keyboard shortcuts
 
-| Shortcut | Action |
-|---|---|
-| `V` | Set selected cells to `✓` |
-| `X` | Set selected cells to `×` |
-| `O` | Set selected cells to `〇` |
-| `-` | Set selected cells to `—` |
-| `,` | Cycle selected cells through the value sequence |
-| `Delete` / `Backspace` | Clear selected cells |
-| `Cmd Z` | Undo |
-| `Cmd Shift Z` / `Cmd Y` | Redo |
-| `Cmd +` / `Cmd =` | Zoom in |
-| `Cmd -` | Zoom out |
-| `Cmd 0` | Reset zoom |
-| `Escape` | Deselect / dismiss |
-| `Shift`+click | Extend selection to range |
+| Shortcut                | Action                                          |
+| ----------------------- | ----------------------------------------------- |
+| `V`                     | Set selected cells to `✓`                       |
+| `X`                     | Set selected cells to `×`                       |
+| `O`                     | Set selected cells to `〇`                      |
+| `-`                     | Set selected cells to `—`                       |
+| `,`                     | Cycle selected cells through the value sequence |
+| `Delete` / `Backspace`  | Clear selected cells                            |
+| `Cmd Z`                 | Undo                                            |
+| `Cmd Shift Z` / `Cmd Y` | Redo                                            |
+| `Cmd +` / `Cmd =`       | Zoom in                                         |
+| `Cmd -`                 | Zoom out                                        |
+| `Cmd 0`                 | Reset zoom                                      |
+| `Escape`                | Deselect / dismiss                              |
+| `Shift`+click           | Extend selection to range                       |
 
 Cell value shortcuts apply to the entire selection. They are active when a cell or range is selected and no text input has focus. Keyboard shortcuts remain available in touch mode (for devices with an attached keyboard).
 
@@ -140,11 +140,11 @@ Cell value shortcuts apply to the entire selection. They are active when a cell 
 
 The input model is detected automatically from the User Agent. You can override it with a URL parameter:
 
-| Parameter | Effect |
-|---|---|
-| `?input=touch` | Force touch mode (persists to `localStorage`) |
-| `?input=mouse` | Force mouse mode (persists to `localStorage`) |
-| `?input=auto` | Clear the stored override, revert to auto-detection |
+| Parameter      | Effect                                              |
+| -------------- | --------------------------------------------------- |
+| `?input=touch` | Force touch mode (persists to `localStorage`)       |
+| `?input=mouse` | Force mouse mode (persists to `localStorage`)       |
+| `?input=auto`  | Clear the stored override, revert to auto-detection |
 
 This is useful when automatic detection is wrong — for example, on a touch-screen Windows laptop where you want touch mode, or on an iPad with a Magic Keyboard where you want full mouse/keyboard behaviour.
 
@@ -152,14 +152,14 @@ This is useful when automatic detection is wrong — for example, on a touch-scr
 
 ## Tech stack
 
-| Component | Technology |
-|---|---|
-| Application | Vanilla HTML, CSS, and JavaScript (no framework) |
-| xlsx read | [SheetJS](https://sheetjs.com/) `xlsx@0.18.5` (jsDelivr CDN) |
-| xlsx write | [ExcelJS](https://github.com/exceljs/exceljs) `4.4.0` (jsDelivr CDN) |
+| Component                | Technology                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Application              | Vanilla HTML, CSS, and JavaScript (no framework)                                                                          |
+| xlsx read                | [SheetJS](https://sheetjs.com/) `xlsx@0.18.5` (jsDelivr CDN)                                                              |
+| xlsx write               | [ExcelJS](https://github.com/exceljs/exceljs) `4.4.0` (jsDelivr CDN)                                                      |
 | Project file compression | [Compression Streams API](https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API) (browser-native gzip) |
-| PWA | Web App Manifest |
-| State persistence | `localStorage` |
+| PWA                      | Web App Manifest                                                                                                          |
+| State persistence        | `localStorage`                                                                                                            |
 
 ---
 
