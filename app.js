@@ -56,6 +56,7 @@ const state = {
   altRows: false,
   selectedRow: null,
   selection: null,
+  selectedHeader: null, // {h, c} when a single header cell is selected for edit
   anchor: null,
   viewMode: false,
 };
@@ -422,7 +423,7 @@ function updateLayoutMode() {
     for (const [tabId, wasOpen] of Object.entries(_savedPanelStates)) {
       if (wasOpen && !activeTab) activeTab = tabId;
     }
-    setActiveTab(activeTab || 'sheet');
+    setActiveTab(activeTab || (isTouchDevice ? 'rows' : 'rows'));
   } else if (!isBottomMode && wasBottom) {
     // Leaving bottom mode — clear inline height from bottom-panel drag,
     // restore width/minWidth for desktop, and restore saved open states
@@ -757,9 +758,17 @@ function bindTableEvents() {
         return;
       }
 
-      // Normal click: set anchor only (no visible selection)
+      // Normal click: set anchor. On touch, also promote to a single-cell
+      // selection so the Row Details cell editor sub-panel can render
+      // (touch users have no inline edit path). On mouse, keep the
+      // legacy behaviour — selection is only set via shift-click.
       state.anchor = { r, c };
-      state.selection = null;
+      state.selectedHeader = null;
+      if (isTouchDevice) {
+        state.selection = { r1: r, c1: c, r2: r, c2: c };
+      } else {
+        state.selection = null;
+      }
       updateSelectionVisual();
 
       if (!isReadOnly()) {
@@ -819,6 +828,7 @@ function bindTableEvents() {
         saveState();
       }
       updateSelectionVisual();
+      updateRowDetailsPanel();
     });
 
     td.addEventListener('mouseenter', () => {
@@ -853,7 +863,17 @@ function bindTableEvents() {
       if (isModalOpen()) return;
       state.selection = null;
       state.anchor = null;
+      // Corner cell: no per-cell override path — corner label field owns it.
+      if (th.classList.contains('corner-cell')) {
+        state.selectedHeader = null;
+      } else if (th.dataset.headerRow !== undefined && th.dataset.col !== undefined) {
+        state.selectedHeader = { h: +th.dataset.headerRow, c: +th.dataset.col };
+      } else {
+        state.selectedHeader = null;
+      }
       updateSelectionVisual();
+      updateRowDetailsPanel();
+      renderSelectedHeaderField();
     });
     th.addEventListener('dblclick', () => {
       if (isReadOnly()) return;
@@ -988,7 +1008,15 @@ function bindStickyLeftInteractions() {
 
     leftCell.addEventListener('touchstart', (e) => {
       if (!isTouchDevice) return;
-      if (e.touches.length !== 1) return;
+      // Multi-touch (e.g. pinch-zoom): cancel any armed long-press/drag and bail.
+      if (e.touches.length > 1) {
+        clearTouchTimers();
+        touchStartXY = null;
+        touchArmed = false;
+        if (touchDragging) finishRowDrag();
+        touchDragging = false;
+        return;
+      }
       if (isModalOpen()) return;
       const touch = e.touches[0];
       touchStartXY = { x: touch.clientX, y: touch.clientY };
@@ -1072,7 +1100,8 @@ function bindStickyLeftInteractions() {
 // ── Row selection ──────────────────────────────────
 function selectRow(idx) {
   state.selectedRow = (state.selectedRow === idx) ? null : idx;
-  state.selection = null;
+  // Per sidepanel-editing-coverage.md resolution #5, state.selectedRow and
+  // state.selection may coexist. Do not clear state.selection here.
   state.anchor = null;
   $table.querySelectorAll('.sticky-left').forEach((td) => {
     const r = +td.dataset.row;
@@ -1083,15 +1112,149 @@ function selectRow(idx) {
 }
 
 // ── Row Details sidepanel ──────────────────────────
+function buildCellEditorHTML() {
+  // Renders the cell editor sub-panel markup for the current selection.
+  // Returns '' when no content-cell selection exists.
+  if (!state.selection) return '';
+  const { r1, c1, r2, c2 } = state.selection;
+  const single = (r1 === r2 && c1 === c2);
+  const count = (r2 - r1 + 1) * (c2 - c1 + 1);
+  const curVal = single ? getCellValue(r1, c1) : '';
+  const arrowMatch = single ? /^←(\d+)✓$/.exec(curVal) : null;
+
+  let body = '';
+  if (arrowMatch) {
+    const n = arrowMatch[1];
+    body = `
+      <div class="cell-editor-label">Arrow count</div>
+      <div class="arrow-count-editor">
+        <button class="btn btn-sm arrow-count-dec" title="Decrement">−</button>
+        <input type="number" class="arrow-count-input" min="0" value="${esc(n)}">
+        <button class="btn btn-sm arrow-count-inc" title="Increment">+</button>
+      </div>
+      <div class="btn-row" style="margin-top:6px;">
+        <button class="btn btn-sm arrow-count-clear">Clear</button>
+      </div>
+    `;
+  } else {
+    const label = single
+      ? 'Cell value'
+      : `${count} cells selected`;
+    const vals = ['✓', '×', '〇', '—', ''];
+    const labels = { '✓': '✓', '×': '×', '〇': '〇', '—': '—', '': '∅' };
+    const activeVal = single ? curVal : null;
+    const btns = vals.map((v) => {
+      const isActive = v === activeVal ? ' active' : '';
+      return `<button class="cell-val-btn${isActive}" data-value="${escAttr(v)}">${esc(labels[v])}</button>`;
+    }).join('');
+    const customHint = (single && curVal && !vals.includes(curVal))
+      ? `<div class="cell-editor-hint">Current: ${esc(curVal)}</div>`
+      : '';
+    body = `
+      <div class="cell-editor-label">${esc(label)}</div>
+      <div class="cell-value-buttons">${btns}</div>
+      ${customHint}
+    `;
+  }
+
+  return `<hr class="row-cell-separator"><div class="row-cell-editor">${body}</div>`;
+}
+
+function bindCellEditorEvents() {
+  const editor = $rowDetailsBody.querySelector('.row-cell-editor');
+  if (!editor) return;
+  if (!state.selection) return;
+  const { r1, c1, r2, c2 } = state.selection;
+
+  const applyValueToSelection = (v) => {
+    if (isReadOnly()) return;
+    commitUndoNode('Set cell');
+    for (let r = r1; r <= r2; r++) {
+      for (let c = c1; c <= c2; c++) {
+        setCellValue(r, c, v);
+      }
+    }
+    renderTable();
+    saveState();
+  };
+
+  editor.querySelectorAll('.cell-val-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      applyValueToSelection(btn.dataset.value);
+    });
+  });
+
+  const numInput = editor.querySelector('.arrow-count-input');
+  const dec = editor.querySelector('.arrow-count-dec');
+  const inc = editor.querySelector('.arrow-count-inc');
+  const clearBtn = editor.querySelector('.arrow-count-clear');
+
+  const writeArrow = (n) => {
+    if (isReadOnly()) return;
+    const clean = Math.max(0, parseInt(n, 10) || 0);
+    setCellValue(r1, c1, `←${clean}✓`);
+    renderTable();
+    saveState();
+  };
+
+  if (numInput) {
+    numInput.addEventListener('input', () => {
+      commitUndoNodeThrottled('Edit arrow count');
+      writeArrow(numInput.value);
+    });
+  }
+  if (dec) {
+    dec.addEventListener('click', () => {
+      if (isReadOnly()) return;
+      commitUndoNode('Edit arrow count');
+      const cur = parseInt((numInput && numInput.value) || '0', 10) || 0;
+      writeArrow(Math.max(0, cur - 1));
+    });
+  }
+  if (inc) {
+    inc.addEventListener('click', () => {
+      if (isReadOnly()) return;
+      commitUndoNode('Edit arrow count');
+      const cur = parseInt((numInput && numInput.value) || '0', 10) || 0;
+      writeArrow(cur + 1);
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (isReadOnly()) return;
+      commitUndoNode('Clear arrow count');
+      // Resolution #4: clear destination = empty.
+      setCellValue(r1, c1, '');
+      renderTable();
+      saveState();
+    });
+  }
+}
+
 function updateRowDetailsPanel() {
   const idx = state.selectedRow;
-  if (idx === null || idx === undefined || !state.rows[idx]) {
+  const hasRow = (idx !== null && idx !== undefined && state.rows[idx]);
+  const hasSel = !!state.selection;
+
+  if (!hasRow && !hasSel) {
     const hint = isTouchDevice
       ? 'Tap a row label to select it. Press and hold to reorder. Long-press for more options.'
       : 'Double-click a row label to edit. Drag to reorder. Right-click for more options.';
     $rowDetailsBody.innerHTML = `<p class="row-details-info">${hint}</p>`;
     return;
   }
+
+  if (!hasRow && hasSel) {
+    // Scenario 2: cell selected, no row selected.
+    $rowDetailsBody.innerHTML = `
+      <p class="row-details-info">Tap a row label to see row details.</p>
+      ${buildCellEditorHTML()}
+    `;
+    bindCellEditorEvents();
+    applyViewModeLock();
+    return;
+  }
+
   const row = state.rows[idx];
   $rowDetailsBody.innerHTML = `
     <div class="row-details-selection">
@@ -1103,6 +1266,7 @@ function updateRowDetailsPanel() {
         <button id="rd-bold" class="${row.bold ? 'active' : ''}" title="Bold"><b>B</b></button>
         <button id="rd-underline" class="${row.underline ? 'active' : ''}" title="Underline"><u>U</u></button>
       </div>
+      ${hasSel ? buildCellEditorHTML() : ''}
       <div class="row-detail-actions" style="display:flex;align-items:center;gap:6px;margin-top:6px;">
         <span style="font-size:11px;">Move to</span>
         <input type="number" id="rd-move-target" min="1" max="${state.rows.length}" value="${idx + 1}"
@@ -1113,6 +1277,8 @@ function updateRowDetailsPanel() {
       </div>
     </div>
   `;
+
+  if (hasSel) bindCellEditorEvents();
 
   const nameInput = document.getElementById('rd-name');
   nameInput.addEventListener('input', () => {
@@ -1281,6 +1447,8 @@ function applyHeaderCellEdit(cell, val) {
       state.headerOverrides[key] = val;
     }
     saveState();
+    // Keep the sidepanel Corner label field in sync with inline dblclick edits.
+    renderCornerLabelField();
     return;
   }
 
@@ -1296,6 +1464,8 @@ function applyHeaderCellEdit(cell, val) {
       state.headerOverrides[key] = val;
     }
     saveState();
+    // Keep the Selected header sub-panel in sync with inline dblclick edits.
+    renderSelectedHeaderField();
   }
 }
 
@@ -1594,6 +1764,11 @@ function deleteRow(idx) {
 let longPressTimer = null;
 document.addEventListener('touchstart', (e) => {
   if (!isTouchDevice) return;
+  // Multi-touch (e.g. pinch-zoom): cancel any armed long-press and bail.
+  if (e.touches.length > 1) {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    return;
+  }
   if (isReadOnly()) return;
   const td = e.target.closest('.content-cell');
   if (!td) return;
@@ -1619,6 +1794,131 @@ document.addEventListener('touchstart', (e) => {
 
 document.addEventListener('touchend', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
 document.addEventListener('touchmove', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
+
+// ── Sidebar: Corner label field (Option B — single field area at top of
+//    Header Patterns panel). Renders one input per header row; in the
+//    overwhelming single-header-row case this is a single input.
+function renderCornerLabelField() {
+  const host = document.getElementById('corner-label-field');
+  if (!host) return;
+  if (!state.headerOverrides) state.headerOverrides = {};
+
+  const parts = state.headerPatterns.map((hp, h) => {
+    const key = `corner_${h}`;
+    const hasOverride = Object.prototype.hasOwnProperty.call(state.headerOverrides, key)
+      && state.headerOverrides[key] !== undefined;
+    const overrideVal = hasOverride ? state.headerOverrides[key] : '';
+    const autoVal = hp?.pattern || '';
+    const multi = state.headerPatterns.length > 1;
+    const labelText = multi ? `Corner label ${h}` : 'Corner label';
+    return `
+      <div class="field corner-label-field" data-index="${h}">
+        <span class="field-label">${esc(labelText)}</span>
+        <input type="text" class="corner-label-input" data-index="${h}"
+          value="${escAttr(overrideVal)}"
+          placeholder="${escAttr(autoVal)}">
+        <button class="btn btn-sm corner-label-clear" data-index="${h}"
+          title="Clear override" style="${hasOverride ? '' : 'visibility:hidden;'}">×</button>
+      </div>
+    `;
+  }).join('');
+  host.innerHTML = parts;
+
+  host.querySelectorAll('.corner-label-input').forEach((inp) => {
+    const i = +inp.dataset.index;
+    inp.addEventListener('input', () => {
+      commitUndoNodeThrottled('Edit corner label');
+      if (!state.headerOverrides) state.headerOverrides = {};
+      const key = `corner_${i}`;
+      const val = inp.value;
+      const autoVal = state.headerPatterns[i]?.pattern || '';
+      if (val === '' || val === autoVal) {
+        delete state.headerOverrides[key];
+      } else {
+        state.headerOverrides[key] = val;
+      }
+      // Toggle clear-button visibility without full re-render to avoid
+      // clobbering the input's focus/caret position.
+      const clearBtn = host.querySelector(`.corner-label-clear[data-index="${i}"]`);
+      if (clearBtn) {
+        const has = Object.prototype.hasOwnProperty.call(state.headerOverrides, key);
+        clearBtn.style.visibility = has ? '' : 'hidden';
+      }
+      renderTable();
+      saveState();
+    });
+  });
+
+  host.querySelectorAll('.corner-label-clear').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (isReadOnly()) return;
+      const i = +btn.dataset.index;
+      commitUndoNode('Clear corner label');
+      if (state.headerOverrides) delete state.headerOverrides[`corner_${i}`];
+      renderCornerLabelField();
+      renderTable();
+      saveState();
+    });
+  });
+}
+
+// ── Sidebar: Selected header cell override (resolution #3).
+//    Renders a "Selected header" sub-panel in the Header Patterns section
+//    when a non-corner header cell is selected. Mirrors the corner label
+//    field's input + clear pattern. Used by touch and mouse alike.
+function renderSelectedHeaderField() {
+  const host = document.getElementById('selected-header-field');
+  if (!host) return;
+  const sel = state.selectedHeader;
+  if (!sel) { host.innerHTML = ''; return; }
+  const { h, c } = sel;
+  if (!state.headerPatterns[h]) { host.innerHTML = ''; return; }
+  if (!state.headerOverrides) state.headerOverrides = {};
+  const key = `${h}_${c}`;
+  const hasOverride = Object.prototype.hasOwnProperty.call(state.headerOverrides, key)
+    && state.headerOverrides[key] !== undefined;
+  const overrideVal = hasOverride ? state.headerOverrides[key] : '';
+  const hp = state.headerPatterns[h];
+  const autoVal = hp ? (getPatternValues(hp, c + 1)[c] || '') : '';
+  const labelText = `Header [${h}, ${c + 1}]`;
+
+  host.innerHTML = `
+    <div class="field selected-header-field">
+      <span class="field-label">${esc(labelText)}</span>
+      <input type="text" class="selected-header-input"
+        value="${escAttr(overrideVal)}"
+        placeholder="${escAttr(autoVal)}">
+      <button class="btn btn-sm selected-header-clear"
+        title="Clear override" style="${hasOverride ? '' : 'visibility:hidden;'}">×</button>
+    </div>
+  `;
+
+  const inp = host.querySelector('.selected-header-input');
+  const clearBtn = host.querySelector('.selected-header-clear');
+
+  inp.addEventListener('input', () => {
+    commitUndoNodeThrottled('Edit header cell');
+    const val = inp.value;
+    if (val === '' || val === autoVal) {
+      delete state.headerOverrides[key];
+    } else {
+      state.headerOverrides[key] = val;
+    }
+    const has = Object.prototype.hasOwnProperty.call(state.headerOverrides, key);
+    if (clearBtn) clearBtn.style.visibility = has ? '' : 'hidden';
+    renderTable();
+    saveState();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (isReadOnly()) return;
+    commitUndoNode('Clear header cell');
+    delete state.headerOverrides[key];
+    renderSelectedHeaderField();
+    renderTable();
+    saveState();
+  });
+}
 
 // ── Sidebar: Pattern List ──────────────────────────
 function renderPatternList() {
@@ -1674,6 +1974,8 @@ function renderPatternList() {
   });
 
   bindPatternEvents();
+  renderCornerLabelField();
+  renderSelectedHeaderField();
 }
 
 function bindPatternEvents() {
@@ -2021,7 +2323,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     state.selection = null;
     state.anchor = null;
+    state.selectedHeader = null;
     updateSelectionVisual();
+    updateRowDetailsPanel();
+    renderSelectedHeaderField();
   }
 
   // Delete / Backspace — clear selected cells only (never delete rows via keyboard)
@@ -2945,6 +3250,13 @@ function init() {
   document.querySelectorAll('.bottom-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       const tabId = btn.dataset.tab;
+      // Touch + bottom-panel mode: tabs can only switch sections, never collapse.
+      // Tapping the already-active tab is a no-op; collapse is drag-only.
+      if (isTouchDevice && isBottomMode) {
+        if (btn.classList.contains('active')) return;
+        setActiveTab(tabId);
+        return;
+      }
       if (btn.classList.contains('active') && isBottomMode) {
         // Clicking active tab = toggle collapse
         if ($sidepanel.classList.contains('collapsed')) {
@@ -2989,6 +3301,8 @@ function init() {
         document.removeEventListener('pointermove', onMove);
         document.removeEventListener('pointerup', onUp);
         if (!moved) {
+          // Touch + bottom-panel: disable click-to-toggle. Drag-only.
+          if (isTouchDevice && isBottomMode) return;
           // Click: toggle collapse
           if ($sidepanel.classList.contains('collapsed')) {
             $sidepanel.classList.remove('collapsed');

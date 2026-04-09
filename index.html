@@ -31,30 +31,37 @@
       <button id="sidepanel-toggle" class="sidepanel-tab" title="Toggle panel">⋮</button>
       <div class="bottom-panel-handle"></div>
       <div class="bottom-panel-tabs">
-        <button class="bottom-tab active" data-tab="sheet">Sheet</button>
-        <button class="bottom-tab" data-tab="style">Style</button>
+        <button class="bottom-tab active" data-tab="rows">Rows</button>
         <button class="bottom-tab" data-tab="header">Header</button>
-        <button class="bottom-tab" data-tab="rows">Rows</button>
+        <button class="bottom-tab" data-tab="style">Style</button>
+        <button class="bottom-tab" data-tab="sheet">Sheet</button>
         <button class="bottom-tab" data-tab="hist">Hist</button>
       </div>
       <div class="sidepanel-content">
         <h2 class="sidepanel-title">Daakaa</h2>
 
-        <!-- Spreadsheet Options -->
-        <details class="panel" data-tab-id="sheet" data-tab-label="Sheet" open>
-          <summary class="panel-header">Spreadsheet</summary>
+        <!-- Row Details -->
+        <details class="panel" data-tab-id="rows" data-tab-label="Rows" open>
+          <summary class="panel-header">Row Details</summary>
           <div class="panel-body">
-            <label class="field">
-              <span class="field-label">Columns</span>
-              <input type="number" id="col-count" min="1" max="366" value="7">
-            </label>
-            <div class="btn-row" style="margin-top:4px;">
-              <button id="btn-import" class="btn btn-sm">Import .xlsx</button>
-              <button id="btn-export" class="btn btn-sm">Export .xlsx</button>
+            <div id="row-details-body">
+              <p class="row-details-info">Select a row label to see its details.</p>
             </div>
-            <div class="btn-row" style="margin-top:4px;">
-              <button id="btn-proj-export" class="btn btn-sm">Export project</button>
-              <button id="btn-proj-import" class="btn btn-sm">Import project</button>
+            <div class="btn-row" style="margin-top:6px;">
+              <button id="add-row-item" class="btn btn-sm">+ Add row</button>
+            </div>
+          </div>
+        </details>
+
+        <!-- Header Patterns -->
+        <details class="panel" data-tab-id="header" data-tab-label="Header">
+          <summary class="panel-header">Header Patterns</summary>
+          <div class="panel-body">
+            <div id="corner-label-field"></div>
+            <div id="selected-header-field"></div>
+            <div id="pattern-list"></div>
+            <div class="btn-row" style="margin-top:6px;">
+              <button id="add-pattern" class="btn btn-sm">+ Add pattern row</button>
             </div>
           </div>
         </details>
@@ -90,26 +97,21 @@
           </div>
         </details>
 
-        <!-- Header Patterns -->
-        <details class="panel" data-tab-id="header" data-tab-label="Header" open>
-          <summary class="panel-header">Header Patterns</summary>
+        <!-- Spreadsheet Options -->
+        <details class="panel" data-tab-id="sheet" data-tab-label="Sheet">
+          <summary class="panel-header">Spreadsheet</summary>
           <div class="panel-body">
-            <div id="pattern-list"></div>
-            <div class="btn-row" style="margin-top:6px;">
-              <button id="add-pattern" class="btn btn-sm">+ Add pattern row</button>
+            <label class="field">
+              <span class="field-label">Columns</span>
+              <input type="number" id="col-count" min="1" max="366" value="7">
+            </label>
+            <div class="btn-row" style="margin-top:4px;">
+              <button id="btn-import" class="btn btn-sm">Import .xlsx</button>
+              <button id="btn-export" class="btn btn-sm">Export .xlsx</button>
             </div>
-          </div>
-        </details>
-
-        <!-- Row Details -->
-        <details class="panel" data-tab-id="rows" data-tab-label="Rows" open>
-          <summary class="panel-header">Row Details</summary>
-          <div class="panel-body">
-            <div id="row-details-body">
-              <p class="row-details-info">Select a row label to see its details.</p>
-            </div>
-            <div class="btn-row" style="margin-top:6px;">
-              <button id="add-row-item" class="btn btn-sm">+ Add row</button>
+            <div class="btn-row" style="margin-top:4px;">
+              <button id="btn-proj-export" class="btn btn-sm">Export project</button>
+              <button id="btn-proj-import" class="btn btn-sm">Import project</button>
             </div>
           </div>
         </details>

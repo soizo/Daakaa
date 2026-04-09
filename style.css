@@ -1394,3 +1394,115 @@ body.input-touch :focus-visible {
 	outline: 2px solid #000;
 	outline-offset: 1px;
 }
+
+/* ── Cell editor sub-panel (Row Details) ─────────── */
+.row-cell-separator {
+	border: none;
+	border-top: 1px solid var(--border);
+	margin: 8px 0;
+}
+
+.row-cell-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+
+.cell-editor-label {
+	font-size: 11px;
+	color: #000;
+}
+
+.cell-editor-hint {
+	font-size: 11px;
+	color: #666;
+}
+
+.cell-value-buttons {
+	display: flex;
+	gap: 4px;
+}
+
+.cell-val-btn {
+	flex: 1;
+	min-width: 0;
+	height: 28px;
+	border: 1px solid var(--border);
+	background: #fff;
+	color: #000;
+	font-family: var(--font);
+	font-size: 14px;
+	cursor: pointer;
+	padding: 0;
+}
+
+.cell-val-btn:hover {
+	background: var(--accent);
+	color: var(--accent-text);
+}
+
+.cell-val-btn.active {
+	background: var(--accent);
+	color: var(--accent-text);
+}
+
+body.input-touch .cell-val-btn {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-input);
+}
+
+.arrow-count-editor {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.arrow-count-editor .arrow-count-input {
+	flex: 1;
+	min-width: 0;
+	height: 28px;
+	padding: 0 6px;
+	border: 1px solid var(--border);
+	font-family: var(--font);
+	font-size: 12px;
+	background: #fff;
+	color: #000;
+}
+
+body.input-touch .arrow-count-editor .arrow-count-input {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-input);
+	padding: 0 var(--touch-px);
+}
+
+.arrow-count-editor .arrow-count-dec,
+.arrow-count-editor .arrow-count-inc {
+	width: 36px;
+	flex: 0 0 36px;
+}
+
+body.input-touch .arrow-count-editor .arrow-count-dec,
+body.input-touch .arrow-count-editor .arrow-count-inc {
+	width: var(--touch-input-h);
+	flex: 0 0 var(--touch-input-h);
+}
+
+/* ── Corner label + Selected header fields ───────── */
+.corner-label-field .corner-label-input::placeholder,
+.selected-header-field .selected-header-input::placeholder {
+	color: #888;
+	font-style: italic;
+}
+
+.corner-label-clear,
+.selected-header-clear {
+	flex: 0 0 auto;
+	width: 28px;
+	padding: 0;
+}
+
+body.input-touch .corner-label-clear,
+body.input-touch .selected-header-clear {
+	width: var(--touch-btn-sm-h);
+}
