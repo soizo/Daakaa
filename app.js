@@ -145,6 +145,10 @@ function applyViewModeLock() {
     const el = document.getElementById(id);
     if (el) el.disabled = locked;
   });
+
+  // History undo/redo buttons (touch only, but safe to set regardless)
+  if ($btnUndo) $btnUndo.disabled = locked;
+  if ($btnRedo) $btnRedo.disabled = locked;
 }
 
 // ── Undo Tree ─────────────────────────────────────
@@ -394,6 +398,8 @@ const $btnProjExport = document.getElementById('btn-proj-export');
 const $btnProjImport = document.getElementById('btn-proj-import');
 const $projFileInput = document.getElementById('proj-file-input');
 const $rowDetailsBody = document.getElementById('row-details-body');
+const $btnUndo = document.getElementById('btn-undo');
+const $btnRedo = document.getElementById('btn-redo');
 
 // ── Bottom Mode (responsive) ──────────────────────
 let isBottomMode = false;
@@ -2532,6 +2538,9 @@ function bindSidepanelControls() {
   $btnProjExport.addEventListener('click', handleProjectExport);
   $btnProjImport.addEventListener('click', () => $projFileInput.click());
   $projFileInput.addEventListener('change', handleProjectImport);
+
+  $btnUndo.addEventListener('click', () => { if (!isReadOnly()) undo(); });
+  $btnRedo.addEventListener('click', () => { if (!isReadOnly()) redo(); });
 }
 
 // ── Style Application ──────────────────────────────
