@@ -1026,10 +1026,65 @@ function bindTableEvents() {
     });
   });
 
-  // Group header row: click to select + collapse/expand
+  // Group header row: click/drag/context interactions
   $table.querySelectorAll('.group-header-row').forEach((tr) => {
-    tr.addEventListener('click', () => {
-      const groupId = tr.dataset.groupId;
+    const groupId = tr.dataset.groupId;
+    const groupType = tr.dataset.groupType;
+    const isNamed = groupType === 'named';
+
+    // ── Mouse: drag-to-reorder (named groups only) + click-to-toggle ──
+    let gMouseDownPos = null;
+    let gIsDragging = false;
+    const G_DRAG_THRESHOLD = 5;
+
+    const labelCell = tr.querySelector('.group-header-label');
+
+    if (labelCell) {
+      labelCell.addEventListener('mousedown', (e) => {
+        if (isModalOpen()) return;
+        if (e.button !== 0) return;
+        if (isTouchDevice) return;
+
+        if (!isNamed || isReadOnly()) {
+          // Non-draggable: just let click fire normally
+          return;
+        }
+
+        gMouseDownPos = { x: e.clientX, y: e.clientY };
+        gIsDragging = false;
+
+        const onMove = (ev) => {
+          if (!gMouseDownPos) return;
+          const dx = ev.clientX - gMouseDownPos.x;
+          const dy = ev.clientY - gMouseDownPos.y;
+          if (Math.abs(dx) + Math.abs(dy) > G_DRAG_THRESHOLD && !gIsDragging) {
+            gIsDragging = true;
+            startGroupDrag(tr, groupId, gMouseDownPos.y);
+          }
+          if (gIsDragging) {
+            handleRowDragMove(ev);
+          }
+        };
+
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          if (gIsDragging) {
+            finishRowDrag();
+          }
+          // If not dragging, the click event will fire naturally and handle toggle/select
+          gMouseDownPos = null;
+          gIsDragging = false;
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    }
+
+    tr.addEventListener('click', (e) => {
+      // If a drag just finished, don't toggle
+      if (gIsDragging) return;
       // Toggle collapse
       if (groupId === '__pinned__') {
         state.pinnedCollapsed = !state.pinnedCollapsed;
@@ -1053,8 +1108,6 @@ function bindTableEvents() {
     tr.addEventListener('dblclick', (e) => {
       if (isReadOnly()) return;
       if (isTouchDevice) return;
-      const groupId = tr.dataset.groupId;
-      const groupType = tr.dataset.groupType;
       if (groupType !== 'named') return;
       e.stopPropagation();
       startGroupLabelInlineEdit(tr, groupId);
@@ -1063,35 +1116,108 @@ function bindTableEvents() {
     // Context menu (mouse)
     tr.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      const groupId = tr.dataset.groupId;
-      const groupType = tr.dataset.groupType;
       showGroupContextMenu(e.clientX, e.clientY, groupId, groupType);
     });
 
-    // Touch: long-press for group context menu
+    // ── Touch: long-press = context menu or drag ──
+    // Named groups: arm at 250ms for drag, 600ms for context menu (same as row drag).
+    // Pinned/Other: 600ms for context menu only.
     let gTouchTimer = null;
+    let gTouchArmTimer = null;
     let gTouchStart = null;
+    let gTouchArmed = false;
+    let gTouchDragging = false;
+    let gTouchContextShown = false;
+    const G_TOUCH_ARM_MS = 250;
+    const G_TOUCH_CTX_MS = 600;
+    const G_TOUCH_MOVE_PX = 6;
+
+    const clearGTouchTimers = () => {
+      if (gTouchTimer) { clearTimeout(gTouchTimer); gTouchTimer = null; }
+      if (gTouchArmTimer) { clearTimeout(gTouchArmTimer); gTouchArmTimer = null; }
+    };
+
     tr.addEventListener('touchstart', (e) => {
       if (!isTouchDevice) return;
-      if (e.touches.length > 1) { if (gTouchTimer) { clearTimeout(gTouchTimer); gTouchTimer = null; } return; }
+      if (e.touches.length > 1) {
+        clearGTouchTimers();
+        gTouchStart = null;
+        gTouchArmed = false;
+        if (gTouchDragging) finishRowDrag();
+        gTouchDragging = false;
+        return;
+      }
+      if (isModalOpen()) return;
       const touch = e.touches[0];
       gTouchStart = { x: touch.clientX, y: touch.clientY };
+      gTouchArmed = false;
+      gTouchDragging = false;
+      gTouchContextShown = false;
+
+      if (!isReadOnly() && isNamed) {
+        gTouchArmTimer = setTimeout(() => {
+          gTouchArmTimer = null;
+          gTouchArmed = true;
+        }, G_TOUCH_ARM_MS);
+      }
+
       gTouchTimer = setTimeout(() => {
         gTouchTimer = null;
-        const groupId = tr.dataset.groupId;
-        const groupType = tr.dataset.groupType;
+        if (gTouchDragging) return;
+        gTouchContextShown = true;
         showGroupContextMenu(touch.clientX, touch.clientY, groupId, groupType);
-      }, 600);
+      }, G_TOUCH_CTX_MS);
     }, { passive: true });
+
     tr.addEventListener('touchmove', (e) => {
-      if (!gTouchStart || !gTouchTimer) return;
+      if (!isTouchDevice) return;
+      if (!gTouchStart) return;
       const touch = e.touches[0];
-      if (Math.abs(touch.clientX - gTouchStart.x) + Math.abs(touch.clientY - gTouchStart.y) > 6) {
-        clearTimeout(gTouchTimer); gTouchTimer = null;
+      const dx = touch.clientX - gTouchStart.x;
+      const dy = touch.clientY - gTouchStart.y;
+      const moved = Math.abs(dx) + Math.abs(dy);
+
+      if (!gTouchArmed) {
+        if (moved > G_TOUCH_MOVE_PX) {
+          clearGTouchTimers();
+          gTouchStart = null;
+        }
+        return;
       }
+
+      if (gTouchArmed && !gTouchDragging && moved > G_TOUCH_MOVE_PX) {
+        if (gTouchTimer) { clearTimeout(gTouchTimer); gTouchTimer = null; }
+        gTouchDragging = true;
+        startGroupDrag(tr, groupId, touch.clientY);
+      }
+
+      if (gTouchDragging) {
+        handleRowDragMove({ clientX: touch.clientX, clientY: touch.clientY });
+        if (e.cancelable) e.preventDefault();
+      }
+    }, { passive: false });
+
+    tr.addEventListener('touchend', () => {
+      if (!isTouchDevice) return;
+      clearGTouchTimers();
+      if (gTouchDragging) {
+        finishRowDrag();
+      }
+      // If no drag and no context menu, the click event handles toggle/select
+      gTouchStart = null;
+      gTouchArmed = false;
+      gTouchDragging = false;
+      gTouchContextShown = false;
     }, { passive: true });
-    tr.addEventListener('touchend', () => { if (gTouchTimer) { clearTimeout(gTouchTimer); gTouchTimer = null; } }, { passive: true });
-    tr.addEventListener('touchcancel', () => { if (gTouchTimer) { clearTimeout(gTouchTimer); gTouchTimer = null; } }, { passive: true });
+
+    tr.addEventListener('touchcancel', () => {
+      clearGTouchTimers();
+      if (gTouchDragging) finishRowDrag();
+      gTouchStart = null;
+      gTouchArmed = false;
+      gTouchDragging = false;
+      gTouchContextShown = false;
+    }, { passive: true });
   });
 
   $table.querySelectorAll('thead th').forEach((th) => {
@@ -1825,6 +1951,26 @@ function applyHeaderCellEdit(cell, val) {
 // ── Row Drag System ────────────────────────────────
 let dragState = null;
 
+// Determine which group section the pointer is currently over.
+// Returns: null (pinned), group ID string (named group), or '__other__'.
+function getGroupAtDisplayPosition(ev, tbody) {
+  const allElements = Array.from(tbody.querySelectorAll('tr:not(.drag-hidden):not(.drag-gap)'));
+  let currentGroup = null; // null = pinned area (before any group header)
+  for (const el of allElements) {
+    if (el.classList.contains('group-header-row')) {
+      const type = el.dataset.groupType;
+      if (type === 'pinned') currentGroup = null;
+      else if (type === 'other') currentGroup = '__other__';
+      else currentGroup = el.dataset.groupId;
+    }
+    const rect = el.getBoundingClientRect();
+    if (ev.clientY < rect.top + rect.height / 2) {
+      return currentGroup;
+    }
+  }
+  return currentGroup; // below everything = last section
+}
+
 function startRowDrag(tr, rowIdx, startY) {
   const tbody = $table.querySelector('tbody');
 
@@ -1859,11 +2005,70 @@ function startRowDrag(tr, rowIdx, startY) {
     offsetY: startY - rect.top,
     gapIdx: rowIdx,
     tbody,
+    isGroupDrag: false,
+    groupId: null,          // for group drag: the group being dragged
+    targetGroup: null,      // for row drag: which group the drop target is in
+    groupGapIdx: null,      // for group drag: target position in state.groups
+    autoExpandTimer: null,  // timer for auto-expanding collapsed groups
+    autoExpandedGroupId: null, // group that was auto-expanded during drag
+  };
+}
+
+// Start a group header drag (reorder groups).
+function startGroupDrag(tr, groupId, startY) {
+  const tbody = $table.querySelector('tbody');
+
+  const ghostTable = document.createElement('table');
+  ghostTable.className = 'spreadsheet';
+  ghostTable.style.position = 'fixed';
+  ghostTable.style.zIndex = '50';
+  ghostTable.style.pointerEvents = 'none';
+  ghostTable.style.margin = '0';
+  ghostTable.style.opacity = '0.85';
+  ghostTable.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+  ghostTable.style.background = '#fff';
+
+  const colgroup = $table.querySelector('colgroup');
+  if (colgroup) ghostTable.appendChild(colgroup.cloneNode(true));
+  const ghostBody = document.createElement('tbody');
+  ghostBody.appendChild(tr.cloneNode(true));
+  ghostTable.appendChild(ghostBody);
+  document.body.appendChild(ghostTable);
+
+  const rect = tr.getBoundingClientRect();
+  ghostTable.style.left = rect.left + 'px';
+  ghostTable.style.top = (startY - rect.height / 2) + 'px';
+  ghostTable.style.width = rect.width + 'px';
+
+  tr.classList.add('drag-hidden');
+
+  const groupIdx = state.groups.findIndex(g => g.id === groupId);
+
+  dragState = {
+    tr,
+    rowIdx: null,
+    ghostTable,
+    offsetY: startY - rect.top,
+    gapIdx: null,
+    tbody,
+    isGroupDrag: true,
+    groupId,
+    groupIdx,
+    targetGroup: null,
+    groupGapIdx: groupIdx,
+    autoExpandTimer: null,
+    autoExpandedGroupId: null,
   };
 }
 
 function handleRowDragMove(ev) {
   if (!dragState) return;
+
+  if (dragState.isGroupDrag) {
+    handleGroupDragMove(ev);
+    return;
+  }
+
   const { ghostTable, offsetY, tbody, rowIdx } = dragState;
 
   ghostTable.style.top = (ev.clientY - offsetY) + 'px';
@@ -1879,22 +2084,156 @@ function handleRowDragMove(ev) {
   }
   targetIdx = Math.max(0, Math.min(state.rows.length, targetIdx));
 
+  // Determine which group section the target falls in.
+  if (state.groups.length > 0) {
+    dragState.targetGroup = getGroupAtDisplayPosition(ev, tbody);
+  }
+
+  // Auto-expand collapsed groups on drag hover (500ms dwell).
+  if (state.groups.length > 0) {
+    // Check if the pointer is directly over a collapsed group header.
+    const hoveredHeader = Array.from(tbody.querySelectorAll('.group-header-row:not(.drag-hidden):not(.drag-gap)'))
+      .find(el => {
+        const rect = el.getBoundingClientRect();
+        return ev.clientY >= rect.top && ev.clientY <= rect.bottom;
+      });
+    const hoveredHeaderGroupId = hoveredHeader ? hoveredHeader.dataset.groupId : null;
+    const isHeaderCollapsed = hoveredHeaderGroupId ? getGroupCollapsed(hoveredHeaderGroupId) : false;
+
+    if (hoveredHeaderGroupId && isHeaderCollapsed && dragState.autoExpandedGroupId !== hoveredHeaderGroupId) {
+      // Clear any existing timer for a different group
+      if (dragState.autoExpandTimer) {
+        clearTimeout(dragState.autoExpandTimer);
+        dragState.autoExpandTimer = null;
+      }
+      // Set a new timer to auto-expand after 500ms
+      const expandGroupId = hoveredHeaderGroupId;
+      dragState.autoExpandTimer = setTimeout(() => {
+        if (!dragState) return;
+        // Expand the group
+        if (expandGroupId === '__pinned__') {
+          state.pinnedCollapsed = false;
+        } else if (expandGroupId === '__other__') {
+          state.otherCollapsed = false;
+        } else {
+          const g = state.groups.find(g => g.id === expandGroupId);
+          if (g) g.collapsed = false;
+        }
+        dragState.autoExpandedGroupId = expandGroupId;
+        // Re-render but preserve drag state: remove ghost, re-render, re-add ghost
+        const ghost = dragState.ghostTable;
+        const wasDragHidden = dragState.tr;
+        if (ghost.parentNode) ghost.remove();
+        wasDragHidden.classList.remove('drag-hidden');
+        renderTable();
+        // Re-find the dragged row's tr in the new DOM
+        const newTbody = $table.querySelector('tbody');
+        const newTr = newTbody.querySelector(`tr[data-storage-row="${dragState.rowIdx}"]`);
+        if (newTr) newTr.classList.add('drag-hidden');
+        dragState.tbody = newTbody;
+        document.body.appendChild(ghost);
+      }, 500);
+    } else if (!hoveredHeaderGroupId || !isHeaderCollapsed) {
+      if (dragState.autoExpandTimer) {
+        clearTimeout(dragState.autoExpandTimer);
+        dragState.autoExpandTimer = null;
+      }
+    }
+  }
+
   if (targetIdx !== dragState.gapIdx) {
     dragState.gapIdx = targetIdx;
     updateDragGap(tbody, rowIdx, targetIdx);
+  }
+
+  // Highlight target group header during cross-group drag
+  updateDragGroupHighlight(tbody, dragState.targetGroup);
+}
+
+function handleGroupDragMove(ev) {
+  const { ghostTable, offsetY, tbody, groupIdx } = dragState;
+
+  ghostTable.style.top = (ev.clientY - offsetY) + 'px';
+
+  // Find target position among named group headers only.
+  const groupHeaders = Array.from(tbody.querySelectorAll('.group-header-row[data-group-type="named"]:not(.drag-hidden):not(.drag-gap)'));
+  let targetGroupGapIdx = groupIdx;
+
+  for (let i = 0; i < groupHeaders.length; i++) {
+    const rect = groupHeaders[i].getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    const gid = groupHeaders[i].dataset.groupId;
+    const gIdx = state.groups.findIndex(g => g.id === gid);
+    if (ev.clientY < mid) {
+      targetGroupGapIdx = gIdx;
+      break;
+    }
+    targetGroupGapIdx = gIdx + 1;
+  }
+
+  // Clamp: cannot go above 0 (before first group = after pinned) or beyond last group (before Other).
+  targetGroupGapIdx = Math.max(0, Math.min(state.groups.length, targetGroupGapIdx));
+
+  if (targetGroupGapIdx !== dragState.groupGapIdx) {
+    dragState.groupGapIdx = targetGroupGapIdx;
+    updateGroupDragGap(tbody, dragState.groupId, targetGroupGapIdx);
+  }
+}
+
+// Highlight the target group header when dragging a row across groups.
+function updateDragGroupHighlight(tbody, targetGroupId) {
+  tbody.querySelectorAll('.group-header-row').forEach(el => {
+    el.classList.remove('drag-target-group');
+  });
+  if (targetGroupId === null) {
+    // Pinned section
+    const pinnedHeader = tbody.querySelector('.group-header-row[data-group-type="pinned"]');
+    if (pinnedHeader) pinnedHeader.classList.add('drag-target-group');
+  } else if (targetGroupId === '__other__') {
+    const otherHeader = tbody.querySelector('.group-header-row[data-group-type="other"]');
+    if (otherHeader) otherHeader.classList.add('drag-target-group');
+  } else if (targetGroupId) {
+    const header = tbody.querySelector(`.group-header-row[data-group-id="${CSS.escape(targetGroupId)}"]`);
+    if (header) header.classList.add('drag-target-group');
   }
 }
 
 function finishRowDrag() {
   if (!dragState) return;
-  const { tr, rowIdx, ghostTable, gapIdx, tbody } = dragState;
+
+  if (dragState.isGroupDrag) {
+    finishGroupDrag();
+    return;
+  }
+
+  const { tr, rowIdx, ghostTable, gapIdx, tbody, targetGroup, autoExpandTimer, autoExpandedGroupId } = dragState;
+
+  // Clean up auto-expand timer
+  if (autoExpandTimer) clearTimeout(autoExpandTimer);
 
   if (ghostTable.parentNode) ghostTable.remove();
   tbody.querySelectorAll('.drag-gap').forEach((g) => g.remove());
+  tbody.querySelectorAll('.drag-target-group').forEach(el => el.classList.remove('drag-target-group'));
   tr.classList.remove('drag-hidden');
 
+  // Re-collapse auto-expanded group if drop didn't land in it.
+  // Map targetGroup (null for pinned) to the header group id format for comparison.
+  if (autoExpandedGroupId) {
+    const normalizedTarget = targetGroup === null ? '__pinned__' : targetGroup;
+    if (normalizedTarget !== autoExpandedGroupId) {
+      if (autoExpandedGroupId === '__pinned__') {
+        state.pinnedCollapsed = true;
+      } else if (autoExpandedGroupId === '__other__') {
+        state.otherCollapsed = true;
+      } else {
+        const g = state.groups.find(g => g.id === autoExpandedGroupId);
+        if (g) g.collapsed = true;
+      }
+    }
+  }
+
   if (gapIdx !== null && gapIdx !== rowIdx && gapIdx !== rowIdx + 1) {
-    commitUndoNode('Reorder row');
+    commitUndoNode('Move row');
     const from = rowIdx;
     const to = gapIdx > from ? gapIdx - 1 : gapIdx;
     if (state.selectedRow === from) state.selectedRow = to;
@@ -1903,6 +2242,50 @@ function finishRowDrag() {
       else if (from > state.selectedRow && to <= state.selectedRow) state.selectedRow++;
     }
     moveRow(from, to);
+
+    // Update groupId if the row crossed group boundaries.
+    if (state.groups.length > 0 && targetGroup !== undefined) {
+      if (targetGroup === null) {
+        // Dropped in pinned section
+        state.rows[to].groupId = null;
+      } else if (targetGroup === '__other__') {
+        // Dropped in Other section — leave groupId as-is (orphaned → Other)
+        // If it was previously pinned (null), set a stale groupId so it goes to Other.
+        if (state.rows[to].groupId == null) {
+          state.rows[to].groupId = '__orphan__';
+        }
+      } else {
+        // Dropped in a named group
+        state.rows[to].groupId = targetGroup;
+      }
+    }
+
+    renderTable();
+    saveState();
+  } else {
+    // No position change — but still re-collapse if needed and re-render
+    if (autoExpandedGroupId) {
+      renderTable();
+      saveState();
+    }
+  }
+  dragState = null;
+}
+
+function finishGroupDrag() {
+  const { tr, ghostTable, tbody, groupId, groupIdx, groupGapIdx, autoExpandTimer } = dragState;
+
+  if (autoExpandTimer) clearTimeout(autoExpandTimer);
+
+  if (ghostTable.parentNode) ghostTable.remove();
+  tbody.querySelectorAll('.drag-gap').forEach((g) => g.remove());
+  tr.classList.remove('drag-hidden');
+
+  if (groupGapIdx !== null && groupGapIdx !== groupIdx && groupGapIdx !== groupIdx + 1) {
+    commitUndoNode('Reorder group');
+    const [item] = state.groups.splice(groupIdx, 1);
+    const insertAt = groupGapIdx > groupIdx ? groupGapIdx - 1 : groupGapIdx;
+    state.groups.splice(insertAt, 0, item);
     renderTable();
     saveState();
   }
@@ -1922,6 +2305,46 @@ function updateDragGap(tbody, _dragIdx, gapIdx) {
   }
   if (target) tbody.insertBefore(gapTr, target);
   else tbody.appendChild(gapTr);
+}
+
+// Gap indicator for group drag: appears only between group headers.
+function updateGroupDragGap(tbody, dragGroupId, gapIdx) {
+  tbody.querySelectorAll('.drag-gap').forEach((g) => g.remove());
+  const gapTr = document.createElement('tr');
+  gapTr.classList.add('drag-gap');
+  gapTr.innerHTML = `<td colspan="${state.cols + 1}" style="height:calc(var(--cell-h) * var(--zoom) * 0.5);border:none;background:var(--accent);"></td>`;
+
+  // Find the group header at gapIdx position to insert before.
+  // Walk visible named group headers (excluding the dragged one) and find the
+  // one at position gapIdx in the non-dragged ordering.
+  const groupHeaders = Array.from(tbody.querySelectorAll('.group-header-row[data-group-type="named"]:not(.drag-hidden)'));
+  let target = null;
+  let count = 0;
+  for (const gh of groupHeaders) {
+    if (gh.dataset.groupId === dragGroupId) continue;
+    if (count >= gapIdx) {
+      target = gh;
+      break;
+    }
+    count++;
+  }
+
+  // If gapIdx is at the end, insert after the last named group header's section.
+  // Find the "other" header or end of tbody.
+  if (target) {
+    tbody.insertBefore(gapTr, target);
+  } else {
+    // Insert before Other header if it exists, else append
+    const otherHeader = tbody.querySelector('.group-header-row[data-group-type="other"]');
+    if (otherHeader) {
+      tbody.insertBefore(gapTr, otherHeader);
+    } else {
+      // Insert before add-row-strip
+      const addStrip = tbody.querySelector('.add-row-strip');
+      if (addStrip) tbody.insertBefore(gapTr, addStrip);
+      else tbody.appendChild(gapTr);
+    }
+  }
 }
 
 function moveRow(from, to) {

@@ -1612,8 +1612,17 @@ body.input-touch .last-saved-display {
 	background: var(--t3);
 }
 
+.group-header-row.drag-target-group td {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
 .group-header-label {
 	font-weight: 600;
+}
+
+.group-header-row[data-group-type="named"] .group-header-label {
+	cursor: grab;
 }
 
 .group-toggle {
