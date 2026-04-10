@@ -52,8 +52,8 @@ const state = {
   color: '#e0e0e0',
   colorTarget: 'header',
   zoom: 1,
-  altCols: true,
-  altRows: false,
+  altCols: false,
+  altRows: true,
   selectedRow: null,
   selection: null,
   selectedHeader: null, // {h, c} when a single header cell is selected for edit
@@ -226,6 +226,8 @@ function commitUndoNode(actionLabel) {
   pruneTree();
   renderHistoryPanel();
   saveUndoTree();
+  _lastModifiedAt = Date.now();
+  updateLastSavedDisplay();
 }
 
 let _lastCommitTime = 0;
@@ -393,10 +395,9 @@ const $altColsToggle = document.getElementById('alt-cols-toggle');
 const $altRowsToggle = document.getElementById('alt-rows-toggle');
 const $btnImport = document.getElementById('btn-import');
 const $btnExport = document.getElementById('btn-export');
-const $fileInput = document.getElementById('xlsx-file-input');
 const $btnProjExport = document.getElementById('btn-proj-export');
-const $btnProjImport = document.getElementById('btn-proj-import');
-const $projFileInput = document.getElementById('proj-file-input');
+const $btnSave = document.getElementById('btn-save');
+const $importFileInput = document.getElementById('import-file-input');
 const $rowDetailsBody = document.getElementById('row-details-body');
 const $btnUndo = document.getElementById('btn-undo');
 const $btnRedo = document.getElementById('btn-redo');
@@ -2578,13 +2579,11 @@ function bindSidepanelControls() {
     saveState();
   });
 
-  $btnImport.addEventListener('click', () => $fileInput.click());
-  $fileInput.addEventListener('change', handleImport);
+  $btnImport.addEventListener('click', () => $importFileInput.click());
+  $importFileInput.addEventListener('change', handleUnifiedImport);
   $btnExport.addEventListener('click', handleExport);
-
   $btnProjExport.addEventListener('click', handleProjectExport);
-  $btnProjImport.addEventListener('click', () => $projFileInput.click());
-  $projFileInput.addEventListener('change', handleProjectImport);
+  $btnSave.addEventListener('click', () => { saveState(); });
 
   $btnUndo.addEventListener('click', () => { if (!isReadOnly()) undo(); });
   $btnRedo.addEventListener('click', () => { if (!isReadOnly()) redo(); });
@@ -2706,11 +2705,22 @@ async function handleProjectExport() {
   URL.revokeObjectURL(url);
 }
 
-// ── Project Import (.daakaa) ───────────────────────
-async function handleProjectImport() {
-  const file = $projFileInput.files[0];
+// ── Unified Import (auto-detect file type) ─────────
+async function handleUnifiedImport() {
+  const file = $importFileInput.files[0];
   if (!file) return;
-  $projFileInput.value = '';
+  $importFileInput.value = '';
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.daakaa.gz') || name.endsWith('.daakaa.json') || name.endsWith('.json') || name.endsWith('.gz')) {
+    await handleProjectImport(file);
+  } else {
+    await handleImport(file);
+  }
+}
+
+// ── Project Import (.daakaa) ───────────────────────
+async function handleProjectImport(file) {
+  if (!file) return;
 
   if (tableHasContent()) {
     const ok = await showConfirm('The current project has data. Overwrite?');
@@ -2774,10 +2784,8 @@ async function handleProjectImport() {
 }
 
 // ── XLSX Import ────────────────────────────────────
-async function handleImport() {
-  const file = $fileInput.files[0];
+async function handleImport(file) {
   if (!file) return;
-  $fileInput.value = '';
 
   if (tableHasContent()) {
     const ok = await showConfirm('The current table contains data. Overwrite with the imported file?');
@@ -3101,6 +3109,7 @@ function showToast(msg) {
 
 // ── Persistence ────────────────────────────────────
 let _lastSavedAt = 0;
+let _lastModifiedAt = 0;
 
 function saveState() {
   try {
@@ -3131,8 +3140,10 @@ function formatRelativeTime(ts) {
 function updateLastSavedDisplay() {
   const el = document.getElementById('last-saved-display');
   if (!el) return;
-  if (!_lastSavedAt) { el.textContent = ''; return; }
-  el.textContent = 'Saved ' + formatRelativeTime(_lastSavedAt);
+  const parts = [];
+  if (_lastModifiedAt) parts.push('Modified ' + formatRelativeTime(_lastModifiedAt));
+  if (_lastSavedAt) parts.push('Saved ' + formatRelativeTime(_lastSavedAt));
+  el.textContent = parts.join(' · ');
 }
 
 // Periodically refresh the relative time display.
@@ -3214,26 +3225,6 @@ function init() {
   }
   renderHistoryPanel();
 
-  // ── Task 2: Insert last-saved display and save button into History panel ──
-  const $histActions = document.querySelector('.history-actions');
-  if ($histActions) {
-    const $lastSaved = document.createElement('div');
-    $lastSaved.id = 'last-saved-display';
-    $lastSaved.className = 'last-saved-display';
-    $lastSaved.textContent = '';
-    $histActions.parentNode.insertBefore($lastSaved, $histActions.nextSibling);
-
-    const $saveRow = document.createElement('div');
-    $saveRow.className = 'btn-row save-btn-row';
-    const $saveBtn = document.createElement('button');
-    $saveBtn.className = 'btn btn-sm';
-    $saveBtn.textContent = 'Save';
-    $saveBtn.addEventListener('click', () => {
-      saveState();
-    });
-    $saveRow.appendChild($saveBtn);
-    $lastSaved.parentNode.insertBefore($saveRow, $lastSaved.nextSibling);
-  }
   // Initialise the timestamp from current time (state was just loaded/saved).
   _lastSavedAt = Date.now();
   updateLastSavedDisplay();
@@ -3310,25 +3301,28 @@ function init() {
     $sidepanelToggle.style.cursor = 'col-resize';
   });
 
-  // View mode toggle button
+  // View mode floating action buttons — wrapped in a container
+  const $viewModeContainer = document.createElement('div');
+  $viewModeContainer.className = 'view-mode-container';
+
   const $viewModeBtn = document.createElement('button');
   $viewModeBtn.id = 'view-mode-btn';
   $viewModeBtn.className = 'view-mode-btn';
   $viewModeBtn.textContent = '\u25A2'; // ▢ = edit mode (open)
   $viewModeBtn.title = 'Toggle view mode (mouse drag only)';
-  document.getElementById('editor').appendChild($viewModeBtn);
+
+  const $fitBtn = document.createElement('button');
+  $fitBtn.className = 'view-mode-btn';
+  $fitBtn.textContent = '\u229E';
+  $fitBtn.title = 'Reset zoom & scroll to today';
+
+  $viewModeContainer.appendChild($viewModeBtn);
+  $viewModeContainer.appendChild($fitBtn);
+  document.getElementById('editor').appendChild($viewModeContainer);
 
   if (!$sidepanel.classList.contains('collapsed')) {
     $sidepanelToggle.style.cursor = 'col-resize';
   }
-
-  // Fit-to-device button
-  const $fitBtn = document.createElement('button');
-  $fitBtn.className = 'view-mode-btn';
-  $fitBtn.style.left = '52px';
-  $fitBtn.textContent = '\u229E';
-  $fitBtn.title = 'Reset zoom & scroll to today';
-  document.getElementById('editor').appendChild($fitBtn);
 
   $fitBtn.addEventListener('click', () => {
     setZoom(1);
@@ -3342,6 +3336,15 @@ function init() {
     $wrapper.classList.toggle('view-mode', state.viewMode);
     applyViewModeLock();
   });
+
+  // Touch devices default to view mode
+  if (isTouchDevice) {
+    state.viewMode = true;
+    $viewModeBtn.textContent = '\u25A3';
+    $viewModeBtn.classList.add('active');
+    $wrapper.classList.add('view-mode');
+    applyViewModeLock();
+  }
 
   $wrapper.addEventListener('mousedown', (e) => {
     if (!state.viewMode) return;

@@ -106,23 +106,22 @@
               <input type="number" id="col-count" min="1" max="366" value="7">
             </label>
             <div class="btn-row" style="margin-top:4px;">
-              <button id="btn-import" class="btn btn-sm">Import .xlsx</button>
+              <button id="btn-import" class="btn btn-sm">Import</button>
               <button id="btn-export" class="btn btn-sm">Export .xlsx</button>
-            </div>
-            <div class="btn-row" style="margin-top:4px;">
               <button id="btn-proj-export" class="btn btn-sm">Export project</button>
-              <button id="btn-proj-import" class="btn btn-sm">Import project</button>
             </div>
+            <div id="last-saved-display" class="last-saved-display"></div>
+            <button id="btn-save" class="btn" style="margin-top:4px;width:100%;">Save</button>
           </div>
         </details>
 
         <!-- History (undo tree) -->
         <details class="panel" data-tab-id="hist" data-tab-label="Hist">
           <summary class="panel-header">History</summary>
-          <div class="panel-body">
+          <div class="panel-body history-panel-body">
             <div class="history-actions">
-              <button id="btn-undo" class="btn">Undo</button>
-              <button id="btn-redo" class="btn">Redo</button>
+              <button id="btn-undo" class="btn btn-sm">Undo</button>
+              <button id="btn-redo" class="btn btn-sm">Redo</button>
             </div>
             <div id="history-panel" class="history-panel"></div>
           </div>
@@ -142,10 +141,8 @@
     </div>
   </div>
 
-  <!-- Hidden file input for xlsx import -->
-  <input type="file" id="xlsx-file-input" accept=".xlsx,.xls" style="display:none;">
-  <!-- Hidden file input for project import -->
-  <input type="file" id="proj-file-input" accept=".daakaa.gz,.daakaa.json,.json,.gz" style="display:none;">
+  <!-- Hidden file input for unified import -->
+  <input type="file" id="import-file-input" accept=".xlsx,.xls,.daakaa.gz,.daakaa.json,.json,.gz" style="display:none;">
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>

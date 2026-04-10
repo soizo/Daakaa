@@ -900,8 +900,17 @@ body.input-mouse .spreadsheet.alt-rows tbody tr:nth-child(even) td.content-cell:
 	border-color: var(--border);
 }
 
+/* ── History panel body — flex column so tree scrolls, buttons pin at bottom */
+.history-panel-body {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
 /* ── History panel (undo tree) ──────────────────── */
 .history-panel {
+	flex: 1;
+	min-height: 0;
 	max-height: 240px;
 	overflow-y: auto;
 	scrollbar-width: none;
@@ -917,7 +926,7 @@ body.input-mouse .spreadsheet.alt-rows tbody tr:nth-child(even) td.content-cell:
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 3px 4px;
+	padding: 1px 4px;
 	cursor: pointer;
 	white-space: nowrap;
 	color: #000;
@@ -1053,6 +1062,11 @@ body.input-mouse .spreadsheet .add-row-cell:hover {
 	.sidepanel.collapsed {
 		height: 40px;
 		min-height: 40px;
+	}
+
+	body.input-touch .sidepanel.collapsed {
+		height: calc(var(--touch-tab-h) + var(--touch-handle-h));
+		min-height: calc(var(--touch-tab-h) + var(--touch-handle-h));
 	}
 
 	/* Hide the right-side tab strip in bottom mode */
@@ -1233,16 +1247,17 @@ body.input-touch .btn-row {
 	gap: 8px;
 }
 
-/* History undo/redo buttons — touch only */
+/* History undo/redo buttons — touch only, pinned at top of panel */
 .history-actions {
 	display: none;
 }
 body.input-touch .history-actions {
 	display: flex;
 	gap: 6px;
-	margin-bottom: 6px;
+	padding-bottom: 4px;
+	flex-shrink: 0;
 }
-body.input-touch .history-actions .btn {
+body.input-touch .history-actions .btn-sm {
 	flex: 1;
 }
 
@@ -1356,7 +1371,7 @@ body.input-touch .history-panel {
 
 body.input-touch .history-node {
 	font-size: var(--touch-font-label);
-	padding: 8px 6px;
+	padding: 4px 6px;
 }
 
 body.input-touch .history-node-time {
@@ -1525,42 +1540,19 @@ body.input-touch .selected-header-clear {
 	width: var(--touch-btn-sm-h);
 }
 
-/* ── Task 1: Eliminate tappable gaps between touch buttons ── */
-body.input-touch .btn-row {
-	gap: 0;
-}
-body.input-touch .btn-row .btn,
-body.input-touch .btn-row .btn-sm {
-	flex: 1;
-}
-
-body.input-touch .cell-value-buttons {
-	gap: 0;
+/* ── Touch hit-area container for floating action buttons ── */
+.view-mode-container {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	z-index: 6;
+	display: flex;
+	gap: 8px;
+	padding: 12px;
 }
 
-body.input-touch .row-detail-toggles {
-	gap: 0;
-}
-
-body.input-touch .history-actions {
-	gap: 0;
-}
-
-body.input-touch .pattern-item {
-	gap: 0;
-	padding: 0;
-}
-body.input-touch .pattern-item select,
-body.input-touch .pattern-item input {
-	border-left-width: 0;
-}
-body.input-touch .pattern-item select:first-of-type,
-body.input-touch .pattern-item input:first-of-type {
-	border-left-width: 1px;
-}
-body.input-touch .pattern-item-btn {
-	border: 1px solid var(--border);
-	border-left-width: 0;
+.view-mode-container .view-mode-btn {
+	position: static;
 }
 
 /* ── Task 2: Last-saved timestamp display ──────────── */
@@ -1570,6 +1562,7 @@ body.input-touch .pattern-item-btn {
 	text-align: center;
 	padding: 2px 0;
 	white-space: nowrap;
+	flex-shrink: 0;
 }
 
 body.input-touch .last-saved-display {
@@ -1577,6 +1570,3 @@ body.input-touch .last-saved-display {
 	padding: 4px 0;
 }
 
-.save-btn-row {
-	margin-top: 6px;
-}
