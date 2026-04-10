@@ -136,6 +136,8 @@ function applyViewModeLock() {
   const rd = document.getElementById('row-details-body');
   if (rd) {
     rd.querySelectorAll('input, select, textarea, button').forEach((el) => {
+      // Collapse/expand toggle remains always permitted
+      if (el.id === 'rd-group-toggle') return;
       el.disabled = locked;
     });
   }
@@ -763,6 +765,50 @@ function resolveDisplayRows() {
   return entries;
 }
 
+// ── Group Summary Helpers ───────────────────────────
+function getGroupMemberRows(groupId) {
+  const groupIdSet = new Set(state.groups.map(g => g.id));
+  if (groupId === '__pinned__') {
+    return state.rows.map((r, i) => ({ row: r, idx: i })).filter(e => e.row.groupId == null);
+  }
+  if (groupId === '__other__') {
+    return state.rows.map((r, i) => ({ row: r, idx: i })).filter(e => e.row.groupId != null && !groupIdSet.has(e.row.groupId));
+  }
+  return state.rows.map((r, i) => ({ row: r, idx: i })).filter(e => e.row.groupId === groupId);
+}
+
+function countGroupRows(groupId) {
+  return getGroupMemberRows(groupId).length;
+}
+
+function computeGroupSummary(groupId, colIndex) {
+  const members = getGroupMemberRows(groupId);
+  const total = members.length;
+  const counts = { '✓': 0, '×': 0, '〇': 0, '—': 0 };
+
+  for (const { idx } of members) {
+    const val = getCellValue(idx, colIndex);
+    const arrowMatch = /^←(\d+)✓$/.exec(val);
+    if (arrowMatch) {
+      counts['✓'] += parseInt(arrowMatch[1], 10);
+    } else if (val === '✓') {
+      counts['✓'] += 1;
+    } else if (val === '×') {
+      counts['×'] += 1;
+    } else if (val === '〇') {
+      counts['〇'] += 1;
+    } else if (val === '—') {
+      counts['—'] += 1;
+    }
+  }
+
+  const parts = [`[${total}]`];
+  for (const [mark, count] of Object.entries(counts)) {
+    if (count > 0) parts.push(`${count}${mark}`);
+  }
+  return parts.join(' ');
+}
+
 // ── Render Spreadsheet ─────────────────────────────
 function renderTable() {
   const cols = state.cols;
@@ -804,6 +850,7 @@ function renderTable() {
   html += '<tbody>';
   const displayRows = resolveDisplayRows();
   let displayIdx = 0;
+  let stripeCounter = 0;
   for (let di = 0; di < displayRows.length; di++) {
     const entry = displayRows[di];
 
@@ -817,14 +864,27 @@ function renderTable() {
       } else {
         groupId = entry.groupId; groupType = 'named'; label = entry.group.label; collapsed = entry.group.collapsed;
       }
-      const toggle = collapsed ? '\u25B6' : '\u25BC'; // ▶ collapsed, ▼ expanded
-      html += `<tr class="group-header-row" data-group-id="${escAttr(groupId)}" data-group-type="${groupType}">`;
+
+      // Determine member row count for this group
+      const memberCount = countGroupRows(groupId);
+      const trClasses = ['group-header-row'];
+      if (memberCount === 0) trClasses.push('group-empty');
+      if (state.selectedGroup === groupId) trClasses.push('group-header-selected');
+
+      const toggleClass = 'group-toggle' + (collapsed ? ' group-toggle--collapsed' : '');
+
+      html += `<tr class="${trClasses.join(' ')}" data-group-id="${escAttr(groupId)}" data-group-type="${groupType}"${collapsed ? ' data-collapsed="true"' : ''}>`;
       html += `<td class="sticky-left group-header-label" colspan="1">`;
-      html += `<span class="group-toggle">${toggle}</span>`;
+      html += `<span class="${toggleClass}">\u25B6</span>`;
       html += `<span class="group-label-text">${esc(label)}</span>`;
       html += `</td>`;
       for (let c = 0; c < cols; c++) {
-        html += `<td class="group-summary-cell" data-col="${c}"></td>`;
+        if (collapsed) {
+          const summary = computeGroupSummary(groupId, c);
+          html += `<td class="group-summary-cell" data-col="${c}"><span class="group-summary-text">${esc(summary)}</span></td>`;
+        } else {
+          html += `<td class="group-summary-cell" data-col="${c}"></td>`;
+        }
       }
       html += '</tr>';
       continue;
@@ -834,7 +894,9 @@ function renderTable() {
     const r = entry.storageIndex;
     const row = entry.row;
     const isSelected = state.selectedRow === r;
-    html += `<tr data-row="${displayIdx}" data-storage-row="${r}">`;
+    const stripeClass = (stripeCounter % 2 === 1) ? ' class="alt-stripe"' : '';
+    stripeCounter++;
+    html += `<tr data-row="${displayIdx}" data-storage-row="${r}"${stripeClass}>`;
 
     let leftStyle = '';
     if (row.bold) leftStyle += 'font-weight:700;';
@@ -858,6 +920,12 @@ function renderTable() {
   bindTableEvents();
   updateRowDetailsPanel();
   updateSelectionVisual();
+
+  // Show/hide collapse-all/expand-all buttons based on whether groups exist
+  const $groupActions = document.getElementById('group-actions');
+  if ($groupActions) {
+    $groupActions.style.display = state.groups.length > 0 ? '' : 'none';
+  }
 }
 
 function updateSelectionVisual() {
@@ -3617,6 +3685,28 @@ function bindSidepanelControls() {
   $btnExport.addEventListener('click', handleExport);
   $btnProjExport.addEventListener('click', handleProjectExport);
   $btnSave.addEventListener('click', () => { saveState(); });
+
+  // Collapse-all / Expand-all
+  const $collapseAll = document.getElementById('btn-collapse-all');
+  const $expandAll = document.getElementById('btn-expand-all');
+  if ($collapseAll) {
+    $collapseAll.addEventListener('click', () => {
+      state.groups.forEach(g => g.collapsed = true);
+      state.pinnedCollapsed = true;
+      state.otherCollapsed = true;
+      renderTable();
+      saveState();
+    });
+  }
+  if ($expandAll) {
+    $expandAll.addEventListener('click', () => {
+      state.groups.forEach(g => g.collapsed = false);
+      state.pinnedCollapsed = false;
+      state.otherCollapsed = false;
+      renderTable();
+      saveState();
+    });
+  }
 
   $btnUndo.addEventListener('click', () => { if (!isReadOnly()) undo(); });
   $btnRedo.addEventListener('click', () => { if (!isReadOnly()) redo(); });
