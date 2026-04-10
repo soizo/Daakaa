@@ -1265,6 +1265,11 @@ body.input-touch .bottom-panel-tabs {
 body.input-touch .bottom-tab {
 	font-size: var(--touch-font-label);
 	padding: 0 4px;
+	flex: 1 1 0;
+}
+
+body.input-touch .bottom-panel-tabs {
+	gap: 0;
 }
 
 body.input-touch .bottom-tab.active {
@@ -1518,4 +1523,60 @@ body.input-touch .arrow-count-editor .arrow-count-inc {
 body.input-touch .corner-label-clear,
 body.input-touch .selected-header-clear {
 	width: var(--touch-btn-sm-h);
+}
+
+/* ── Task 1: Eliminate tappable gaps between touch buttons ── */
+body.input-touch .btn-row {
+	gap: 0;
+}
+body.input-touch .btn-row .btn,
+body.input-touch .btn-row .btn-sm {
+	flex: 1;
+}
+
+body.input-touch .cell-value-buttons {
+	gap: 0;
+}
+
+body.input-touch .row-detail-toggles {
+	gap: 0;
+}
+
+body.input-touch .history-actions {
+	gap: 0;
+}
+
+body.input-touch .pattern-item {
+	gap: 0;
+	padding: 0;
+}
+body.input-touch .pattern-item select,
+body.input-touch .pattern-item input {
+	border-left-width: 0;
+}
+body.input-touch .pattern-item select:first-of-type,
+body.input-touch .pattern-item input:first-of-type {
+	border-left-width: 1px;
+}
+body.input-touch .pattern-item-btn {
+	border: 1px solid var(--border);
+	border-left-width: 0;
+}
+
+/* ── Task 2: Last-saved timestamp display ──────────── */
+.last-saved-display {
+	font-size: 11px;
+	color: #666;
+	text-align: center;
+	padding: 2px 0;
+	white-space: nowrap;
+}
+
+body.input-touch .last-saved-display {
+	font-size: var(--touch-font-label);
+	padding: 4px 0;
+}
+
+.save-btn-row {
+	margin-top: 6px;
 }

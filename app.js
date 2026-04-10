@@ -466,6 +466,53 @@ function setActiveTab(tabId) {
     $sidepanel.classList.remove('collapsed');
     $sidepanel.style.height = _lastBottomPanelHeight + 'px';
   }
+  // Task 3: auto-scroll history panel to current node when Hist tab opens.
+  if (tabId === 'hist') {
+    scrollHistoryToCurrentNode();
+  }
+}
+
+// Find a today column index (0-based) if one exists in the current pattern.
+// Returns the column index, or -1 if today is not in the pattern.
+function findTodayColumnIndex() {
+  const hpats = state.headerPatterns;
+  for (let h = 0; h < hpats.length; h++) {
+    if (!isCornerCellToday(h)) continue;
+    const todayDate = new Date().getDate();
+    const allVals = getPatternValues(hpats[h], state.cols);
+    for (let c = 0; c < allVals.length; c++) {
+      if (String(allVals[c]) === String(todayDate)) return c;
+    }
+  }
+  return -1;
+}
+
+// Scroll the spreadsheet wrapper so today's column is visible (roughly centred).
+function scrollToTodayColumn() {
+  const colIdx = findTodayColumnIndex();
+  if (colIdx < 0) return;
+  // Find the corresponding <th> in the first header row.
+  const th = $table.querySelector(`thead th[data-col="${colIdx}"]`);
+  if (!th) return;
+  // Centre the column horizontally within the wrapper.
+  const thRect = th.getBoundingClientRect();
+  const wrapRect = $wrapper.getBoundingClientRect();
+  const thCentreRelative = (th.offsetLeft + th.offsetWidth / 2);
+  const targetScrollLeft = thCentreRelative - (wrapRect.width / 2);
+  $wrapper.scrollLeft = Math.max(0, targetScrollLeft);
+}
+
+// Scroll the history panel so the current node is visible.
+function scrollHistoryToCurrentNode() {
+  const panel = document.getElementById('history-panel');
+  if (!panel) return;
+  const currentEl = panel.querySelector('.history-node.current');
+  if (currentEl) {
+    // Use requestAnimationFrame to ensure layout is settled after tab switch.
+    requestAnimationFrame(() => {
+      currentEl.scrollIntoView({ block: 'nearest' });
+    });
+  }
 }
 
 let _lastBottomPanelHeight = 240;
@@ -3053,6 +3100,8 @@ function showToast(msg) {
 }
 
 // ── Persistence ────────────────────────────────────
+let _lastSavedAt = 0;
+
 function saveState() {
   try {
     const s = { ...state };
@@ -3063,7 +3112,31 @@ function saveState() {
     localStorage.setItem('daakaa-state', JSON.stringify(s));
   } catch (_) {}
   saveUndoTree();
+  _lastSavedAt = Date.now();
+  updateLastSavedDisplay();
 }
+
+// Format elapsed time as a short relative string.
+function formatRelativeTime(ts) {
+  if (!ts) return '';
+  const sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 10) return 'just now';
+  if (sec < 60) return sec + 's ago';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return min + 'm ago';
+  const hr = Math.floor(min / 60);
+  return hr + 'h ago';
+}
+
+function updateLastSavedDisplay() {
+  const el = document.getElementById('last-saved-display');
+  if (!el) return;
+  if (!_lastSavedAt) { el.textContent = ''; return; }
+  el.textContent = 'Saved ' + formatRelativeTime(_lastSavedAt);
+}
+
+// Periodically refresh the relative time display.
+setInterval(updateLastSavedDisplay, 30000);
 
 function loadState() {
   try {
@@ -3140,6 +3213,38 @@ function init() {
     createRootNode();
   }
   renderHistoryPanel();
+
+  // ── Task 2: Insert last-saved display and save button into History panel ──
+  const $histActions = document.querySelector('.history-actions');
+  if ($histActions) {
+    const $lastSaved = document.createElement('div');
+    $lastSaved.id = 'last-saved-display';
+    $lastSaved.className = 'last-saved-display';
+    $lastSaved.textContent = '';
+    $histActions.parentNode.insertBefore($lastSaved, $histActions.nextSibling);
+
+    const $saveRow = document.createElement('div');
+    $saveRow.className = 'btn-row save-btn-row';
+    const $saveBtn = document.createElement('button');
+    $saveBtn.className = 'btn btn-sm';
+    $saveBtn.textContent = 'Save';
+    $saveBtn.addEventListener('click', () => {
+      saveState();
+    });
+    $saveRow.appendChild($saveBtn);
+    $lastSaved.parentNode.insertBefore($saveRow, $lastSaved.nextSibling);
+  }
+  // Initialise the timestamp from current time (state was just loaded/saved).
+  _lastSavedAt = Date.now();
+  updateLastSavedDisplay();
+
+  // Task 3: auto-scroll history when the desktop <details> panel is toggled open.
+  const $histDetails = document.querySelector('.panel[data-tab-id="hist"]');
+  if ($histDetails) {
+    $histDetails.addEventListener('toggle', () => {
+      if ($histDetails.open) scrollHistoryToCurrentNode();
+    });
+  }
 
   // Combined sidepanel drag+click logic
 
@@ -3222,11 +3327,12 @@ function init() {
   $fitBtn.className = 'view-mode-btn';
   $fitBtn.style.left = '52px';
   $fitBtn.textContent = '\u229E';
-  $fitBtn.title = 'Reset zoom (100%)';
+  $fitBtn.title = 'Reset zoom & scroll to today';
   document.getElementById('editor').appendChild($fitBtn);
 
   $fitBtn.addEventListener('click', () => {
     setZoom(1);
+    scrollToTodayColumn();
   });
 
   $viewModeBtn.addEventListener('click', () => {
@@ -3295,8 +3401,13 @@ function init() {
       const onMove = (ev) => {
         moved = true;
         const delta = startY - ev.clientY; // dragging up = taller
-        const newH = Math.max(60, Math.min(window.innerHeight * 0.7, startH + delta));
-        if (newH <= 60) {
+        // Floor = tab bar height + handle height so tabs remain fully visible.
+        // Touch: 40 + 20 = 60; mouse: 32 + 8 = 40; use computed values.
+        const tabBarH = document.querySelector('.bottom-panel-tabs')?.offsetHeight || 32;
+        const handleH = $bottomHandle.offsetHeight || 8;
+        const minPanelH = tabBarH + handleH;
+        const newH = Math.max(minPanelH, Math.min(window.innerHeight * 0.7, startH + delta));
+        if (newH <= minPanelH) {
           $sidepanel.classList.add('collapsed');
           $sidepanel.style.height = '';
           _lastBottomPanelHeight = startH;
@@ -3333,6 +3444,9 @@ function init() {
 
   // ── Bottom mode: initial layout detection ─────────
   updateLayoutMode();
+
+  // Task 4: scroll to today's column on page load (after layout settles).
+  requestAnimationFrame(() => { scrollToTodayColumn(); });
 
 }
 
