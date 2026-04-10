@@ -49,6 +49,7 @@
 	/* Touch UI system — see docs/design/touch-ui-system.md §2 */
 	--touch-input-h:       44px;
 	--touch-btn-sm-h:      36px;
+	--touch-secondary-h:   36px;   /* alias for --touch-btn-sm-h; used by row-detail group section */
 	--touch-tab-h:         40px;
 	--touch-handle-h:      20px;
 	--touch-px:            14px;
@@ -1460,7 +1461,8 @@ body.input-touch .history-panel {
 
 body.input-touch .history-node {
 	font-size: var(--touch-font-label);
-	padding: 4px 6px;
+	padding: 8px 6px;
+	min-height: var(--touch-btn-sm-h);
 }
 
 body.input-touch .history-node-time {
@@ -1515,6 +1517,29 @@ body.input-touch .sidepanel-tab:active {
 body.input-touch :focus-visible {
 	outline: 2px solid #000;
 	outline-offset: 1px;
+}
+
+/* §2b — Inline cell-edit toolbar (sticky-left cells) */
+body.input-touch .cell-edit-toolbar button {
+	width: var(--touch-btn-sm-h);
+	height: var(--touch-btn-sm-h);
+	font-size: var(--touch-font-sm);
+}
+
+/* §2c — View mode floating action button */
+body.input-touch .view-mode-btn {
+	width: var(--touch-input-h);
+	height: var(--touch-input-h);
+	font-size: 20px;
+}
+
+/* §4b — Cell editor sub-panel typography */
+body.input-touch .cell-editor-label {
+	font-size: var(--touch-font-sm);
+}
+
+body.input-touch .cell-editor-hint {
+	font-size: var(--touch-font-sm);
 }
 
 /* ── Cell editor sub-panel (Row Details) ─────────── */
