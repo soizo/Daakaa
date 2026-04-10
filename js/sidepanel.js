@@ -224,21 +224,30 @@ function updateRowDetailsPanel() {
 
   var row = state.rows[idx];
 
-  // Build group dropdown HTML
-  var groupDropdownHTML = '';
+  // Build group section HTML — always show so users can create first group
+  var currentGroupId = row.groupId || '';
+  var groupSelectHTML = '';
   if (state.groups.length > 0) {
-    var currentGroupId = row.groupId || '';
     var options = `<option value=""${currentGroupId === '' || currentGroupId === null ? ' selected' : ''}>Pinned</option>`;
     state.groups.forEach(g => {
       options += `<option value="${escAttr(g.id)}"${currentGroupId === g.id ? ' selected' : ''}>${esc(g.label)}</option>`;
     });
-    groupDropdownHTML = `
-      <label class="field" style="margin-top:6px;">
+    groupSelectHTML = `
+      <label class="field">
         <span class="field-label">Group</span>
         <select id="rd-group">${options}</select>
       </label>
     `;
   }
+  var groupDropdownHTML = `
+    <div class="row-detail-group-section" style="margin-top:6px;">
+      ${groupSelectHTML}
+      <div class="btn-row" style="margin-top:4px;">
+        <button id="rd-new-group" class="btn btn-sm">+ New Group</button>
+        <button id="rd-create-group-above" class="btn btn-sm">Create Group Above</button>
+      </div>
+    </div>
+  `;
 
   $rowDetailsBody.innerHTML = `
     <div class="row-details-selection">
@@ -251,10 +260,9 @@ function updateRowDetailsPanel() {
         <button id="rd-underline" class="${row.underline ? 'active' : ''}" title="Underline"><u>U</u></button>
       </div>
       ${hasSel ? buildCellEditorHTML() : ''}
-      <div class="row-detail-actions" style="display:flex;align-items:center;gap:6px;margin-top:6px;">
-        <span style="font-size:11px;">Move to</span>
-        <input type="number" id="rd-move-target" min="1" max="${state.rows.length}" value="${idx + 1}"
-          style="width:48px;height:22px;padding:0 4px;border:1px solid var(--border);font-family:var(--font);font-size:12px;">
+      <div class="row-detail-actions">
+        <span class="row-detail-actions-label">Move to</span>
+        <input type="number" class="row-detail-move-input" id="rd-move-target" min="1" max="${state.rows.length}" value="${idx + 1}">
         <button id="rd-move-btn" class="btn btn-sm">⏎</button>
         <span style="flex:1;"></span>
         <button id="rd-delete" class="btn btn-sm" style="color:#c0392b;">Delete</button>
@@ -316,6 +324,44 @@ function updateRowDetailsPanel() {
       commitUndoNode('Move row to group');
       var val = rdGroup.value;
       state.rows[idx].groupId = val === '' ? null : val;
+      renderTable();
+      saveState();
+    });
+  }
+
+  // New Group button
+  var rdNewGroup = document.getElementById('rd-new-group');
+  if (rdNewGroup) {
+    rdNewGroup.addEventListener('click', () => {
+      if (isReadOnly()) return;
+      var name = prompt('Group name:', 'New Group');
+      if (!name) return;
+      commitUndoNode('Create group');
+      var newGroup = { id: 'g_' + Date.now(), label: name.trim() || 'New Group', collapsed: false };
+      state.groups.push(newGroup);
+      state.rows[idx].groupId = newGroup.id;
+      renderTable();
+      saveState();
+    });
+  }
+
+  // Create Group Above button
+  var rdCreateAbove = document.getElementById('rd-create-group-above');
+  if (rdCreateAbove) {
+    rdCreateAbove.addEventListener('click', () => {
+      if (isReadOnly()) return;
+      var name = prompt('Group name:', 'New Group');
+      if (!name) return;
+      commitUndoNode('Create group');
+      var newGroup = { id: 'g_' + Date.now(), label: name.trim() || 'New Group', collapsed: false };
+      var currentGroupId = state.rows[idx].groupId;
+      var currentGroupIdx = state.groups.findIndex(function(g) { return g.id === currentGroupId; });
+      if (currentGroupIdx >= 0) {
+        state.groups.splice(currentGroupIdx, 0, newGroup);
+      } else {
+        state.groups.unshift(newGroup);
+      }
+      state.rows[idx].groupId = newGroup.id;
       renderTable();
       saveState();
     });

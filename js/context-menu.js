@@ -223,7 +223,7 @@ function showRowContextMenu(x, y, rowIdx) {
 
   // "Move to Group ▸" submenu
   var groupSub = document.createElement('div');
-  groupSub.className = 'context-menu-item context-menu-has-sub';
+  groupSub.className = 'context-menu-has-sub';
   groupSub.textContent = 'Move to Group \u25B8';
   var subMenu = document.createElement('div');
   subMenu.className = 'context-menu-sub';

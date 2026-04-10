@@ -19,29 +19,31 @@ function countGroupRows(groupId) {
   return getGroupMemberRows(groupId).length;
 }
 
-function computeGroupSummary(groupId, colIndex) {
+function computeGroupSummary(groupId) {
   var members = getGroupMemberRows(groupId);
   var total = members.length;
   var counts = { '✓': 0, '×': 0, '〇': 0, '—': 0 };
 
   for (var _m = 0; _m < members.length; _m++) {
     var idx = members[_m].idx;
-    var val = getCellValue(idx, colIndex);
-    var arrowMatch = /^←(\d+)✓$/.exec(val);
-    if (arrowMatch) {
-      counts['✓'] += parseInt(arrowMatch[1], 10);
-    } else if (val === '✓') {
-      counts['✓'] += 1;
-    } else if (val === '×') {
-      counts['×'] += 1;
-    } else if (val === '〇') {
-      counts['〇'] += 1;
-    } else if (val === '—') {
-      counts['—'] += 1;
+    for (var c = 0; c < state.cols; c++) {
+      var val = getCellValue(idx, c);
+      var arrowMatch = /^←(\d+)✓$/.exec(val);
+      if (arrowMatch) {
+        counts['✓'] += parseInt(arrowMatch[1], 10);
+      } else if (val === '✓') {
+        counts['✓'] += 1;
+      } else if (val === '×') {
+        counts['×'] += 1;
+      } else if (val === '〇') {
+        counts['〇'] += 1;
+      } else if (val === '—') {
+        counts['—'] += 1;
+      }
     }
   }
 
-  var parts = [`[${total}]`];
+  var parts = [`[${total} rows]`];
   for (var mark in counts) {
     if (counts[mark] > 0) parts.push(`${counts[mark]}${mark}`);
   }

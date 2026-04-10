@@ -139,20 +139,19 @@ function renderTable() {
       if (memberCount === 0) trClasses.push('group-empty');
       if (state.selectedGroup === groupId) trClasses.push('group-header-selected');
 
-      var toggleClass = 'group-toggle' + (collapsed ? ' group-toggle--collapsed' : '');
+      var toggleChar = collapsed ? '\u25B8' : '\u25BE';
 
       html += `<tr class="${trClasses.join(' ')}" data-group-id="${escAttr(groupId)}" data-group-type="${groupType}"${collapsed ? ' data-collapsed="true"' : ''}>`;
       html += `<td class="sticky-left group-header-label" colspan="1">`;
-      html += `<span class="${toggleClass}">\u25B6</span>`;
+      html += `<span class="group-toggle">${toggleChar}</span>`;
       html += `<span class="group-label-text">${esc(label)}</span>`;
       html += `</td>`;
-      for (var c = 0; c < cols; c++) {
-        if (collapsed) {
-          var summary = computeGroupSummary(groupId, c);
-          html += `<td class="group-summary-cell" data-col="${c}"><span class="group-summary-text">${esc(summary)}</span></td>`;
-        } else {
-          html += `<td class="group-summary-cell" data-col="${c}"></td>`;
-        }
+      if (collapsed) {
+        var summary = computeGroupSummary(groupId);
+        html += `<td class="group-summary-cell" colspan="${cols}"><span class="group-summary-text">${esc(summary)}</span></td>`;
+      } else {
+        var rowCount = countGroupRows(groupId);
+        html += `<td class="group-summary-cell" colspan="${cols}"><span class="group-summary-text">[${rowCount} rows]</span></td>`;
       }
       html += '</tr>';
       continue;

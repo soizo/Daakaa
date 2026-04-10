@@ -781,19 +781,28 @@ body.input-mouse .spreadsheet.alt-rows tbody tr.alt-stripe td.content-cell:hover
 
 .context-menu-has-sub {
 	position: relative;
+	cursor: default;
+	padding: 6px 14px;
+	white-space: nowrap;
+	color: #000;
+}
+
+.context-menu-has-sub:hover {
+	background: var(--t2);
 }
 
 .context-menu-sub {
 	display: none;
 	position: absolute;
 	left: 100%;
-	top: 0;
+	top: -4px;
 	background: #fff;
 	border: 1px solid var(--border);
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 	padding: 4px 0;
 	min-width: 140px;
 	z-index: 101;
+	border-radius: 4px;
 }
 
 .context-menu-has-sub:hover > .context-menu-sub {
@@ -930,6 +939,32 @@ body.input-touch .context-menu-has-sub > .context-menu-sub {
 	background: var(--accent);
 	color: var(--accent-text);
 	border-color: var(--border);
+}
+
+.row-detail-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.row-detail-actions-label {
+	font-size: 11px;
+}
+
+.row-detail-move-input {
+	width: 48px;
+	height: 22px;
+	padding: 0 4px;
+	border: 1px solid var(--border);
+	font-family: var(--font);
+	font-size: 12px;
+	color: #000;
+	background: #fff;
+}
+
+.row-detail-group-section select {
+	width: 100%;
 }
 
 /* ── History panel body — flex column so tree scrolls, buttons pin at bottom */
@@ -1395,6 +1430,28 @@ body.input-touch .row-detail-toggles button {
 	font-size: var(--touch-font-btn);
 }
 
+/* §4.4b — Row Details: move-to and group section */
+body.input-touch .row-detail-actions-label {
+	font-size: var(--touch-font-label);
+}
+
+body.input-touch .row-detail-move-input {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-input);
+	width: 60px;
+	padding: 0 8px;
+}
+
+body.input-touch .row-detail-group-section select {
+	height: var(--touch-input-h);
+	font-size: var(--touch-font-input);
+}
+
+body.input-touch .row-detail-group-section .btn-sm {
+	height: var(--touch-secondary-h);
+	font-size: var(--touch-font-sm);
+}
+
 /* §4.5 — History panel */
 body.input-touch .history-panel {
 	font-size: var(--touch-font-label);
@@ -1654,15 +1711,8 @@ body.input-touch .last-saved-display {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	transform: rotate(90deg);
-	transform-origin: center;
-	transition: transform 0.15s ease;
 	color: inherit;
 	opacity: 0.7;
-}
-
-.spreadsheet .group-toggle--collapsed {
-	transform: rotate(0deg);
 }
 
 /* ── Group label text ───────────────────────────────────────────── */
