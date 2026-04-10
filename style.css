@@ -779,6 +779,38 @@ body.input-mouse .spreadsheet.alt-rows tbody tr:nth-child(even) td.content-cell:
 	color: var(--accent-text);
 }
 
+.context-menu-has-sub {
+	position: relative;
+}
+
+.context-menu-sub {
+	display: none;
+	position: absolute;
+	left: 100%;
+	top: 0;
+	background: #fff;
+	border: 1px solid var(--border);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+	padding: 4px 0;
+	min-width: 140px;
+	z-index: 101;
+}
+
+.context-menu-has-sub:hover > .context-menu-sub {
+	display: block;
+}
+
+/* Touch: show submenu on tap (via :active or always-open approach) */
+body.input-touch .context-menu-has-sub > .context-menu-sub {
+	display: block;
+	position: relative;
+	left: 0;
+	box-shadow: none;
+	border: none;
+	border-top: 1px solid var(--border);
+	padding-left: 12px;
+}
+
 /* ── Toast notification ─────────────────────────── */
 .toast {
 	position: fixed;
@@ -1568,5 +1600,30 @@ body.input-touch .selected-header-clear {
 body.input-touch .last-saved-display {
 	font-size: var(--touch-font-label);
 	padding: 4px 0;
+}
+
+/* ── Row Grouping: group header rows ───────────────── */
+.group-header-row td {
+	background: var(--t2);
+	cursor: pointer;
+}
+
+.group-header-row:hover td {
+	background: var(--t3);
+}
+
+.group-header-label {
+	font-weight: 600;
+}
+
+.group-toggle {
+	display: inline-block;
+	margin-right: 4px;
+	font-size: 0.75em;
+}
+
+.group-summary-cell {
+	font-size: 0.8em;
+	opacity: 0.6;
 }
 
