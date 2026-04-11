@@ -979,7 +979,6 @@ body.input-touch .context-menu-has-sub > .context-menu-sub {
 .history-panel {
 	flex: 1;
 	min-height: 0;
-	max-height: 240px;
 	overflow-y: auto;
 	scrollbar-width: none;
 	-ms-overflow-style: none;
@@ -996,6 +995,10 @@ body.input-touch .context-menu-has-sub > .context-menu-sub {
 
 .history-graph svg {
 	display: block;
+}
+
+.history-graph svg use[stroke-width="4"] {
+	transform: translateX(-2px);
 }
 
 /* ── Color targets ──────────────────────────────── */
