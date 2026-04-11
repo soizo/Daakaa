@@ -194,9 +194,12 @@ var daakaaTemplate = (typeof GitgraphJS !== 'undefined') ? GitgraphJS.templateEx
     branch: {
       lineWidth: 2,
       spacing: 18,
+      label: {
+        display: false,
+      },
     },
     commit: {
-      spacing: 32,
+      spacing: 28,
       dot: {
         size: 4,
         strokeWidth: 1.5,
@@ -214,7 +217,7 @@ var daakaaTemplate = (typeof GitgraphJS !== 'undefined') ? GitgraphJS.templateEx
 
 // Enlarge commit spacing for touch tap targets
 if (daakaaTemplate && typeof isTouchDevice !== 'undefined' && isTouchDevice) {
-  daakaaTemplate.commit.spacing = 44;
+  daakaaTemplate.commit.spacing = 36;
   daakaaTemplate.commit.dot.size = 5;
 }
 
@@ -260,8 +263,7 @@ function buildGitgraph(gitgraph) {
     var timeStr = String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
 
     var commitOpts = {
-      subject: node.actionLabel || 'Edit',
-      body: timeStr,
+      subject: (node.actionLabel || 'Edit') + ' \u00b7 ' + timeStr,
       onMouseDown: function() { jumpToNode(id); },
     };
 
