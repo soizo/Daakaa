@@ -176,64 +176,137 @@ function removeNode(id) {
   delete lastVisitedChild[id];
 }
 
-// ── Undo Tree: history panel rendering ────────────
+// ── Undo Tree: history panel rendering (@gitgraph/js) ──
+
+var daakaaTemplate = (typeof GitgraphJS !== 'undefined') ? GitgraphJS.templateExtend(
+  GitgraphJS.TemplateName.Metro,
+  {
+    colors: [
+      "#000000",
+      "#5a7a8c",
+      "#7a6e5a",
+      "#4a7a5a",
+      "#7a5a6e",
+      "#6e7a4a",
+      "#5a6e7a",
+      "#7a5a4a",
+    ],
+    branch: {
+      lineWidth: 2,
+      spacing: 18,
+    },
+    commit: {
+      spacing: 32,
+      dot: {
+        size: 4,
+        strokeWidth: 1.5,
+        strokeColor: "#000",
+      },
+      message: {
+        font: "11px 'Sarasa UI CL', 'Sarasa Gothic CL', sans-serif",
+        color: "#000",
+        displayAuthor: false,
+        displayHash: false,
+      },
+    },
+  }
+) : null;
+
+// Enlarge commit spacing for touch tap targets
+if (daakaaTemplate && typeof isTouchDevice !== 'undefined' && isTouchDevice) {
+  daakaaTemplate.commit.spacing = 44;
+  daakaaTemplate.commit.dot.size = 5;
+}
+
 function renderHistoryPanel() {
   var panel = document.getElementById('history-panel');
   if (!panel) return;
+  panel.innerHTML = '';
 
-  var pathSet = getAncestorIds(undoCurrentId);
-
-  panel.innerHTML = renderTreeNode(0, pathSet);
-
-  var currentEl = panel.querySelector('.history-node.current');
-  if (currentEl) currentEl.scrollIntoView({ block: 'nearest' });
-
-  panel.querySelectorAll('.history-node').forEach(el => {
-    el.addEventListener('click', () => {
-      jumpToNode(+el.dataset.nodeId);
-    });
-  });
-}
-
-function renderTreeNode(id, pathSet) {
-  var node = undoTree[id];
-  if (!node) return '';
-
-  var isCurrent = id === undoCurrentId;
-  var time = new Date(node.timestamp);
-  var timeStr = String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
-  var label = node.branchLabel || node.actionLabel;
-
-  var html = `<div class="history-node${isCurrent ? ' current' : ''}" data-node-id="${id}">`;
-  html += `<span class="history-node-marker"></span>`;
-  html += `<span class="history-node-label">${esc(label)}</span>`;
-  html += `<span class="history-node-time">${timeStr}</span>`;
-  html += `</div>`;
-
-  if (node.childIds.length > 0) {
-    var onPathChildren = node.childIds.filter(cid => pathSet.has(cid));
-    var offPathChildren = node.childIds.filter(cid => !pathSet.has(cid));
-
-    for (var _i = 0; _i < onPathChildren.length; _i++) {
-      html += renderTreeNode(onPathChildren[_i], pathSet);
-    }
-
-    if (offPathChildren.length > 0) {
-      html += `<div class="history-indent">`;
-      for (var _j = 0; _j < offPathChildren.length; _j++) {
-        html += renderTreeNode(offPathChildren[_j], pathSet);
-      }
-      html += `</div>`;
-    }
+  if (typeof GitgraphJS === 'undefined' || !daakaaTemplate) {
+    panel.textContent = 'History visualisation unavailable.';
+    return;
   }
 
-  return html;
+  var graphContainer = document.createElement('div');
+  graphContainer.className = 'history-graph';
+  panel.appendChild(graphContainer);
+
+  var gitgraph = GitgraphJS.createGitgraph(graphContainer, {
+    orientation: 'vertical',
+    template: daakaaTemplate,
+  });
+
+  buildGitgraph(gitgraph);
+
+  setTimeout(function() {
+    var headEl = panel.querySelector('.history-head-marker');
+    if (headEl) headEl.scrollIntoView({ block: 'nearest' });
+  }, 50);
 }
 
-function countDescendants(id) {
-  var node = undoTree[id];
-  if (!node) return 0;
-  var count = 1;
-  for (var _i = 0; _i < node.childIds.length; _i++) count += countDescendants(node.childIds[_i]);
-  return count;
+function buildGitgraph(gitgraph) {
+  if (!undoTree[0]) return;
+
+  var ancestorSet = getAncestorIds(undoCurrentId);
+  var mainBranch = gitgraph.branch('main');
+
+  function walk(id, currentBranch) {
+    var node = undoTree[id];
+    if (!node) return;
+
+    var isHead = (id === undoCurrentId);
+    var time = new Date(node.timestamp);
+    var timeStr = String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
+
+    var commitOpts = {
+      subject: node.actionLabel || 'Edit',
+      body: timeStr,
+      onMouseDown: function() { jumpToNode(id); },
+    };
+
+    if (isHead) {
+      commitOpts.style = {
+        dot: {
+          size: 6,
+          color: '#ffffff',
+          strokeWidth: 2,
+          strokeColor: '#000000',
+        },
+        message: {
+          font: "bold 11px 'Sarasa UI CL', 'Sarasa Gothic CL', sans-serif",
+          color: '#000000',
+        },
+      };
+    }
+
+    currentBranch.commit(commitOpts);
+
+    if (node.childIds.length === 0) return;
+
+    var mainChild = null;
+    for (var i = 0; i < node.childIds.length; i++) {
+      if (ancestorSet.has(node.childIds[i])) {
+        mainChild = node.childIds[i];
+        break;
+      }
+    }
+    if (mainChild === null) mainChild = node.childIds[node.childIds.length - 1];
+
+    var sideChildren = node.childIds.filter(function(c) { return c !== mainChild; });
+
+    for (var s = 0; s < sideChildren.length; s++) {
+      var sideId = sideChildren[s];
+      var sideNode = undoTree[sideId];
+      var branchName = (sideNode && sideNode.branchLabel)
+        ? sideNode.branchLabel
+        : (sideNode ? sideNode.actionLabel : 'branch-' + sideId);
+      var sideBranch = currentBranch.branch(branchName);
+      walk(sideId, sideBranch);
+    }
+
+    walk(mainChild, currentBranch);
+  }
+
+  walk(0, mainBranch);
 }
