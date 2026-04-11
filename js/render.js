@@ -16,10 +16,10 @@ function resolveDisplayRows() {
   var groupIdSet = new Set(groups.map(g => g.id));
   var entries = [];
 
-  // 1. Pinned rows: groupId is null/undefined.
+  // 1. Pinned rows: groupId === '__pinned__' (explicit only)
   var pinnedRows = [];
   for (var i = 0; i < rows.length; i++) {
-    if (rows[i].groupId == null) pinnedRows.push(i);
+    if (rows[i].groupId === '__pinned__') pinnedRows.push(i);
   }
   if (pinnedRows.length > 0) {
     entries.push({ type: 'pinned-header', collapsed: state.pinnedCollapsed });
@@ -44,11 +44,13 @@ function resolveDisplayRows() {
     }
   }
 
-  // 3. Other rows: groupId is set but matches no existing group.
+  // 3. Other: groupId is null, undefined, or matches no existing group
   var otherRows = [];
   for (var i = 0; i < rows.length; i++) {
     var gid = rows[i].groupId;
-    if (gid != null && !groupIdSet.has(gid)) otherRows.push(i);
+    if (gid === '__pinned__') continue; // already in pinned
+    if (gid != null && groupIdSet.has(gid)) continue; // in a named group
+    otherRows.push(i); // null, undefined, or orphaned → Other
   }
   if (otherRows.length > 0) {
     entries.push({ type: 'other-header', collapsed: state.otherCollapsed });

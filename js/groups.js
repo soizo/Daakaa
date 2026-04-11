@@ -7,10 +7,15 @@
 function getGroupMemberRows(groupId) {
   var groupIdSet = new Set(state.groups.map(g => g.id));
   if (groupId === '__pinned__') {
-    return state.rows.map((r, i) => ({ row: r, idx: i })).filter(e => e.row.groupId == null);
+    return state.rows.map((r, i) => ({ row: r, idx: i })).filter(e => e.row.groupId === '__pinned__');
   }
   if (groupId === '__other__') {
-    return state.rows.map((r, i) => ({ row: r, idx: i })).filter(e => e.row.groupId != null && !groupIdSet.has(e.row.groupId));
+    return state.rows.map((r, i) => ({ row: r, idx: i })).filter(e => {
+      var gid = e.row.groupId;
+      if (gid === '__pinned__') return false;
+      if (gid != null && groupIdSet.has(gid)) return false;
+      return true; // null, undefined, or orphaned → Other
+    });
   }
   return state.rows.map((r, i) => ({ row: r, idx: i })).filter(e => e.row.groupId === groupId);
 }

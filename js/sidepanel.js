@@ -144,10 +144,15 @@ function updateRowDetailsPanel() {
     // Count rows in this group
     var rowCount = 0;
     if (gid === '__pinned__') {
-      rowCount = state.rows.filter(r => r.groupId == null).length;
+      rowCount = state.rows.filter(r => r.groupId === '__pinned__').length;
     } else if (gid === '__other__') {
       var groupIdSet = new Set(state.groups.map(g => g.id));
-      rowCount = state.rows.filter(r => r.groupId != null && !groupIdSet.has(r.groupId)).length;
+      rowCount = state.rows.filter(r => {
+        var g = r.groupId;
+        if (g === '__pinned__') return false;
+        if (g != null && groupIdSet.has(g)) return false;
+        return true;
+      }).length;
     } else {
       rowCount = state.rows.filter(r => r.groupId === gid).length;
     }
@@ -224,14 +229,15 @@ function updateRowDetailsPanel() {
 
   var row = state.rows[idx];
 
-  // Build group section HTML — always show so users can create first group
-  var currentGroupId = row.groupId || '';
+  // Build group section HTML — always show so users can assign rows to groups
+  var currentGroupId = row.groupId;
   var groupSelectHTML = '';
-  if (state.groups.length > 0) {
-    var options = `<option value=""${currentGroupId === '' || currentGroupId === null ? ' selected' : ''}>Pinned</option>`;
+  {
+    var options = '<option value="__pinned__"' + (currentGroupId === '__pinned__' ? ' selected' : '') + '>Pinned</option>';
     state.groups.forEach(g => {
-      options += `<option value="${escAttr(g.id)}"${currentGroupId === g.id ? ' selected' : ''}>${esc(g.label)}</option>`;
+      options += '<option value="' + escAttr(g.id) + '"' + (currentGroupId === g.id ? ' selected' : '') + '>' + esc(g.label) + '</option>';
     });
+    options += '<option value=""' + (currentGroupId == null || (currentGroupId !== '__pinned__' && !state.groups.some(g => g.id === currentGroupId)) ? ' selected' : '') + '>Other</option>';
     groupSelectHTML = `
       <label class="field">
         <span class="field-label">Group</span>
@@ -323,7 +329,13 @@ function updateRowDetailsPanel() {
       if (isReadOnly()) return;
       commitUndoNode('Move row to group');
       var val = rdGroup.value;
-      state.rows[idx].groupId = val === '' ? null : val;
+      if (val === '__pinned__') {
+        state.rows[idx].groupId = '__pinned__';
+      } else if (val === '') {
+        state.rows[idx].groupId = null;
+      } else {
+        state.rows[idx].groupId = val;
+      }
       renderTable();
       saveState();
     });

@@ -264,18 +264,31 @@ function showRowContextMenu(x, y, rowIdx) {
   });
   subMenu.appendChild(newGroupItem);
 
-  // "Pinned (no group)"
+  // "Pinned"
   var pinnedItem = document.createElement('div');
   pinnedItem.className = 'context-menu-item';
-  pinnedItem.textContent = 'Pinned (no group)';
+  pinnedItem.textContent = 'Pinned';
   pinnedItem.addEventListener('click', () => {
+    commitUndoNode('Move row to group');
+    state.rows[rowIdx].groupId = '__pinned__';
+    renderTable();
+    saveState();
+    hideContextMenu();
+  });
+  subMenu.appendChild(pinnedItem);
+
+  // "Other"
+  var otherItem = document.createElement('div');
+  otherItem.className = 'context-menu-item';
+  otherItem.textContent = 'Other';
+  otherItem.addEventListener('click', () => {
     commitUndoNode('Move row to group');
     state.rows[rowIdx].groupId = null;
     renderTable();
     saveState();
     hideContextMenu();
   });
-  subMenu.appendChild(pinnedItem);
+  subMenu.appendChild(otherItem);
 
   groupSub.appendChild(subMenu);
   menu.appendChild(groupSub);

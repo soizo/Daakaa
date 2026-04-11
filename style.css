@@ -1712,12 +1712,20 @@ body.input-touch .last-saved-display {
 
 .spreadsheet td.group-header-label {
 	background: var(--t3-solid);
-	display: flex;
-	align-items: center;
-	gap: 6px;
 	padding: 0 8px 0 6px;
 	overflow: hidden;
+	white-space: nowrap;
 }
+
+.spreadsheet td.group-header-label > * {
+	display: inline;
+	vertical-align: middle;
+}
+
+.spreadsheet td.group-header-label .group-toggle {
+	margin-right: 6px;
+}
+
 
 [data-color-target="all"] .spreadsheet td.group-header-label {
 	background: var(--t3-solid);
@@ -1732,10 +1740,8 @@ body.input-touch .last-saved-display {
 .spreadsheet .group-toggle {
 	font-size: calc(9px * var(--zoom));
 	line-height: 1;
-	flex-shrink: 0;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
+	display: inline;
+	vertical-align: middle;
 	color: inherit;
 	opacity: 0.7;
 }
@@ -1747,8 +1753,8 @@ body.input-touch .last-saved-display {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	flex: 1;
-	min-width: 0;
+	display: inline;
+	vertical-align: middle;
 }
 
 .spreadsheet tr.group-header-row[data-group-type="pinned"] .group-label-text,

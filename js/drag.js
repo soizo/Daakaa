@@ -317,13 +317,10 @@ function finishRowDrag() {
     if (state.groups.length > 0 && targetGroup !== undefined) {
       if (targetGroup === null) {
         // Dropped in pinned section
-        state.rows[to].groupId = null;
+        state.rows[to].groupId = '__pinned__';
       } else if (targetGroup === '__other__') {
-        // Dropped in Other section — leave groupId as-is (orphaned → Other)
-        // If it was previously pinned (null), set a stale groupId so it goes to Other.
-        if (state.rows[to].groupId == null) {
-          state.rows[to].groupId = '__orphan__';
-        }
+        // Dropped in Other section
+        state.rows[to].groupId = null;
       } else {
         // Dropped in a named group
         state.rows[to].groupId = targetGroup;
