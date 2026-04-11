@@ -990,66 +990,13 @@ body.input-touch .context-menu-has-sub > .context-menu-sub {
 	display: none;
 }
 
-.history-node {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 1px 4px;
-	cursor: pointer;
-	white-space: nowrap;
-	color: #000;
+.history-graph {
+	width: 100%;
 }
 
-.history-node:hover {
-	background: var(--t4);
-	color: var(--t4-text);
-}
-
-.history-node.current {
-	font-weight: 700;
-}
-
-.history-node-marker {
-	width: 8px;
-	height: 8px;
-	border: 1.5px solid #000;
-	border-radius: 50%;
-	flex-shrink: 0;
-}
-
-.history-node.current .history-node-marker {
-	background: #000;
-}
-
-.history-node-label {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.history-node-time {
-	color: var(--border);
-	flex-shrink: 0;
-	font-size: 10px;
-}
-
-.history-branch-toggle {
-	font-size: 10px;
-	color: var(--border);
-	cursor: pointer;
-	padding: 2px 4px;
-	margin-left: 14px;
-}
-
-.history-branch-toggle:hover {
-	color: #000;
-}
-
-.history-indent {
-	margin-left: 12px;
-	border-left: 1px solid var(--border);
-	padding-left: 4px;
+.history-graph svg {
+	width: 100%;
+	display: block;
 }
 
 /* ── Color targets ──────────────────────────────── */
@@ -1468,21 +1415,6 @@ body.input-touch .history-panel {
 	overflow-y: visible;
 }
 
-body.input-touch .history-node {
-	font-size: var(--touch-font-label);
-	padding: 8px 6px;
-	min-height: var(--touch-btn-sm-h);
-}
-
-body.input-touch .history-node-time {
-	font-size: 11px;
-}
-
-body.input-touch .history-branch-toggle {
-	font-size: 11px;
-	padding: 6px 8px;
-}
-
 /* §7 — Context menu */
 body.input-touch .context-menu {
 	font-size: var(--touch-font-base);
@@ -1514,7 +1446,6 @@ body.input-touch .btn-sm:active,
 body.input-touch .pattern-item-btn:active,
 body.input-touch .bottom-tab:active,
 body.input-touch .panel-header:active,
-body.input-touch .history-node:active,
 body.input-touch .context-menu-item:active,
 body.input-touch .row-detail-toggles button:active,
 body.input-touch .sidepanel-tab:active {
