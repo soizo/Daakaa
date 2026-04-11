@@ -144,17 +144,12 @@ function renderTable() {
       var toggleChar = collapsed ? '\u25B8' : '\u25BE';
 
       html += `<tr class="${trClasses.join(' ')}" data-group-id="${escAttr(groupId)}" data-group-type="${groupType}"${collapsed ? ' data-collapsed="true"' : ''}>`;
-      html += `<td class="sticky-left group-header-label" colspan="1">`;
+      var summaryText = collapsed ? computeGroupSummary(groupId) : '[' + countGroupRows(groupId) + ' rows]';
+      html += `<td class="sticky-left group-header-label" colspan="${cols + 1}">`;
       html += `<span class="group-toggle">${toggleChar}</span>`;
       html += `<span class="group-label-text">${esc(label)}</span>`;
+      html += `<span class="group-summary-text">${esc(summaryText)}</span>`;
       html += `</td>`;
-      if (collapsed) {
-        var summary = computeGroupSummary(groupId);
-        html += `<td class="group-summary-cell" colspan="${cols}"><span class="group-summary-text">${esc(summary)}</span></td>`;
-      } else {
-        var rowCount = countGroupRows(groupId);
-        html += `<td class="group-summary-cell" colspan="${cols}"><span class="group-summary-text">[${rowCount} rows]</span></td>`;
-      }
       html += '</tr>';
       continue;
     }
@@ -426,21 +421,15 @@ function bindTableEvents() {
       showGroupContextMenu(e.clientX, e.clientY, groupId, groupType);
     });
 
-    // ── Touch: long-press = context menu or drag ──
-    // Named groups: arm at 250ms for drag, 600ms for context menu (same as row drag).
-    // Pinned/Other: 600ms for context menu only.
-    var gTouchTimer = null;
+    // ── Touch: drag to reorder (named groups only) ──
     var gTouchArmTimer = null;
     var gTouchStart = null;
     var gTouchArmed = false;
     var gTouchDragging = false;
-    var gTouchContextShown = false;
     var G_TOUCH_ARM_MS = 250;
-    var G_TOUCH_CTX_MS = 600;
     var G_TOUCH_MOVE_PX = 6;
 
     var clearGTouchTimers = () => {
-      if (gTouchTimer) { clearTimeout(gTouchTimer); gTouchTimer = null; }
       if (gTouchArmTimer) { clearTimeout(gTouchArmTimer); gTouchArmTimer = null; }
     };
 
@@ -459,7 +448,6 @@ function bindTableEvents() {
       gTouchStart = { x: touch.clientX, y: touch.clientY };
       gTouchArmed = false;
       gTouchDragging = false;
-      gTouchContextShown = false;
 
       if (!isReadOnly() && isNamed) {
         gTouchArmTimer = setTimeout(() => {
@@ -467,13 +455,6 @@ function bindTableEvents() {
           gTouchArmed = true;
         }, G_TOUCH_ARM_MS);
       }
-
-      gTouchTimer = setTimeout(() => {
-        gTouchTimer = null;
-        if (gTouchDragging) return;
-        gTouchContextShown = true;
-        showGroupContextMenu(touch.clientX, touch.clientY, groupId, groupType);
-      }, G_TOUCH_CTX_MS);
     }, { passive: true });
 
     tr.addEventListener('touchmove', (e) => {
@@ -493,7 +474,6 @@ function bindTableEvents() {
       }
 
       if (gTouchArmed && !gTouchDragging && moved > G_TOUCH_MOVE_PX) {
-        if (gTouchTimer) { clearTimeout(gTouchTimer); gTouchTimer = null; }
         gTouchDragging = true;
         startGroupDrag(tr, groupId, touch.clientY);
       }
@@ -510,11 +490,9 @@ function bindTableEvents() {
       if (gTouchDragging) {
         finishRowDrag();
       }
-      // If no drag and no context menu, the click event handles toggle/select
       gTouchStart = null;
       gTouchArmed = false;
       gTouchDragging = false;
-      gTouchContextShown = false;
     }, { passive: true });
 
     tr.addEventListener('touchcancel', () => {
@@ -523,7 +501,6 @@ function bindTableEvents() {
       gTouchStart = null;
       gTouchArmed = false;
       gTouchDragging = false;
-      gTouchContextShown = false;
     }, { passive: true });
   });
 
@@ -670,18 +647,14 @@ function bindStickyLeftInteractions() {
     //     then release < 600 ms → context menu
     //   release before 250 ms, no movement → tap = select row
     var touchArmTimer = null;
-    var touchCtxTimer = null;
     var touchStartXY = null;
     var touchArmed = false;     // drag armed after 250ms
-    var touchDragging = false;  // drag actively started
-    var touchContextShown = false;
+    var touchDragging = false;
     var TOUCH_ARM_MS = 250;
-    var TOUCH_CTX_MS = 600;
     var TOUCH_MOVE_PX = 6;
 
     var clearTouchTimers = () => {
       if (touchArmTimer) { clearTimeout(touchArmTimer); touchArmTimer = null; }
-      if (touchCtxTimer) { clearTimeout(touchCtxTimer); touchCtxTimer = null; }
     };
 
     leftCell.addEventListener('touchstart', (e) => {
@@ -700,20 +673,12 @@ function bindStickyLeftInteractions() {
       touchStartXY = { x: touch.clientX, y: touch.clientY };
       touchArmed = false;
       touchDragging = false;
-      touchContextShown = false;
 
       if (!isReadOnly()) {
         touchArmTimer = setTimeout(() => {
           touchArmTimer = null;
           touchArmed = true;
         }, TOUCH_ARM_MS);
-
-        touchCtxTimer = setTimeout(() => {
-          touchCtxTimer = null;
-          if (touchDragging) return;
-          touchContextShown = true;
-          showRowContextMenu(touch.clientX, touch.clientY, rowIdx);
-        }, TOUCH_CTX_MS);
       }
     }, { passive: true });
 
@@ -735,8 +700,6 @@ function bindStickyLeftInteractions() {
       }
 
       if (touchArmed && !touchDragging && moved > TOUCH_MOVE_PX) {
-        // Start drag. Cancel context-menu timer.
-        if (touchCtxTimer) { clearTimeout(touchCtxTimer); touchCtxTimer = null; }
         touchDragging = true;
         var tr = leftCell.closest('tr');
         startRowDrag(tr, rowIdx, touch.clientY);
@@ -754,14 +717,13 @@ function bindStickyLeftInteractions() {
       clearTouchTimers();
       if (touchDragging) {
         finishRowDrag();
-      } else if (!touchContextShown && touchStartXY) {
-        // Simple tap → select row (if arm never fired and no movement)
+      } else if (touchStartXY) {
+        // Simple tap → select row
         selectRow(rowIdx);
       }
       touchStartXY = null;
       touchArmed = false;
       touchDragging = false;
-      touchContextShown = false;
     }, { passive: true });
 
     leftCell.addEventListener('touchcancel', () => {
@@ -770,7 +732,6 @@ function bindStickyLeftInteractions() {
       touchStartXY = null;
       touchArmed = false;
       touchDragging = false;
-      touchContextShown = false;
     }, { passive: true });
   });
 }

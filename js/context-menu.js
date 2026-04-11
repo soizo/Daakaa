@@ -348,39 +348,4 @@ function showRowContextMenu(x, y, rowIdx) {
   moveInput.select();
 }
 
-// Long-press for content cells (touch only; opens context menu, never inline edit).
-// Disabled on non-touch devices and in view mode per spec §5 / §7.
-var longPressTimer = null;
-document.addEventListener('touchstart', (e) => {
-  if (!isTouchDevice) return;
-  // Multi-touch (e.g. pinch-zoom): cancel any armed long-press and bail.
-  if (e.touches.length > 1) {
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    return;
-  }
-  if (isReadOnly()) return;
-  var td = e.target.closest('.content-cell');
-  if (!td) return;
-  var touch = e.touches[0];
-  longPressTimer = setTimeout(() => {
-    longPressTimer = null;
-    var r = +td.dataset.row;          // display index for selection check
-    var sr = +td.dataset.storageRow;  // storage index for data operations
-    var c = +td.dataset.col;
-
-    if (state.selection) {
-      var { r1, c1, r2, c2 } = state.selection;
-      var isMulti = (r2 - r1 + c2 - c1) > 0;
-      var isInside = r >= r1 && r <= r2 && c >= c1 && c <= c2;
-      if (isMulti && isInside) {
-        showBatchContextMenu(touch.clientX, touch.clientY);
-        return;
-      }
-    }
-
-    showContentContextMenu(touch.clientX, touch.clientY, sr, c);
-  }, 500);
-}, { passive: true });
-
-document.addEventListener('touchend', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
-document.addEventListener('touchmove', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
+// Long-press context menu on touch removed — sidepanel editing replaces it.

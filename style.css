@@ -1324,6 +1324,10 @@ body.input-touch .history-actions {
 	gap: 6px;
 	padding-bottom: 4px;
 	flex-shrink: 0;
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: #fff;
 }
 body.input-touch .history-actions .btn-sm {
 	flex: 1;
@@ -1454,9 +1458,14 @@ body.input-touch .row-detail-group-section .btn-sm {
 }
 
 /* §4.5 — History panel */
+body.input-touch .history-panel-body {
+	overflow-y: auto;
+	overflow-x: hidden;
+}
 body.input-touch .history-panel {
 	font-size: var(--touch-font-label);
 	max-height: none;
+	overflow-y: visible;
 }
 
 body.input-touch .history-node {
@@ -1762,46 +1771,14 @@ body.input-touch .last-saved-display {
 	font-weight: 500;
 }
 
-/* ── Summary cells ──────────────────────────────────────────────── */
-
-.spreadsheet .group-summary-cell {
-	text-align: left;
-	vertical-align: middle;
-	padding: 0 6px;
-	user-select: none;
-}
+/* ── Summary text (inline within group-header-label) ───────────── */
 
 .spreadsheet .group-summary-text {
 	font-size: calc(11px * var(--zoom));
 	opacity: 0.55;
 	letter-spacing: 0.01em;
 	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	display: block;
-}
-
-/* ── Suppress conflicting rules from the base stylesheet ─────────── */
-
-.spreadsheet.alt-cols tr.group-header-row td.group-summary-cell:nth-child(even) {
-	background: var(--t2);
-}
-
-.spreadsheet.alt-rows tbody tr.group-header-row td.group-summary-cell {
-	background: var(--t2);
-}
-.spreadsheet.alt-rows tbody tr.group-header-row.alt-stripe td.group-summary-cell {
-	background: var(--t2);
-}
-
-body.input-mouse .spreadsheet tr.group-header-row td.group-summary-cell:hover {
-	outline: none;
-}
-body.input-mouse .spreadsheet.alt-cols tr.group-header-row td.group-summary-cell:nth-child(even):hover {
-	outline: none;
-}
-body.input-mouse .spreadsheet.alt-rows tbody tr.group-header-row td.group-summary-cell:hover {
-	outline: none;
+	margin-left: 8px;
 }
 
 /* ── Drag hover feedback (cross-group drag target) ──────────────── */
