@@ -264,7 +264,8 @@ function buildGitgraph(gitgraph) {
 
     var commitOpts = {
       subject: (node.actionLabel || 'Edit') + ' \u00b7 ' + timeStr,
-      onMouseDown: function() { jumpToNode(id); },
+      onClick: function() { jumpToNode(id); },
+      onMessageClick: function() { jumpToNode(id); },
     };
 
     if (isHead) {

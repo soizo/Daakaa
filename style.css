@@ -991,11 +991,10 @@ body.input-touch .context-menu-has-sub > .context-menu-sub {
 }
 
 .history-graph {
-	width: 100%;
+	overflow-x: auto;
 }
 
 .history-graph svg {
-	width: 100%;
 	display: block;
 }
 
